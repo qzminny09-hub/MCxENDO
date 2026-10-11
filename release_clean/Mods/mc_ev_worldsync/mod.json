@@ -1,0 +1,13 @@
+{
+  "name": "MC-EV World Sync",
+  "version": "1.0.0",
+  "author": "qzmin",
+  "description": "Two-way world sync between Minecraft and Endorphin Vice. Spawns physics objects in EV for blocks placed in Minecraft, destroys them when blocks are broken in Minecraft.",
+  "entry_point": "mc_ev_worldsync.lua",
+  "api_version": "3.0",
+  "dependencies": [],
+  "tags": ["minecraft", "world-sync", "physics", "cross-game"],
+  "license": "All-Rights-Reserved",
+  "repository": "https://github.com/qzmin/mc-ev-worldsync",
+  "issues": "https://github.com/qzmin/mc-ev-worldsync/issues"
+}

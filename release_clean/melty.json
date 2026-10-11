@@ -1,0 +1,104 @@
+{
+  "name": "Minecraft x Endorphin Vice World Sync",
+  "slug": "mc-ev-worldsync",
+  "version": "1.0.0",
+  "description": "Two-way world sync between Minecraft and Endorphin Vice. Build in Minecraft, see your structures as physics objects in Endorphin Vice. Destroy things in Endorphin Vice, watch blocks break in Minecraft.",
+  "games": [
+    {
+      "role": "primary",
+      "slug": "minecraft-java",
+      "version": "1.21.1",
+      "loader": "fabric",
+      "setup": {
+        "type": "prism-instance",
+        "instance": "mc-ev-worldsync",
+        "mmc_pack_url": "https://github.com/qzmin/mc-ev-worldsync/releases/download/v1.0.0/mc-ev-worldsync-instance.zip"
+      }
+    },
+    {
+      "role": "companion",
+      "slug": "custom-endorphin-vice",
+      "version": "1.0.0",
+      "path_token": "{game:custom-endorphin-vice}"
+    }
+  ],
+  "components": [
+    {
+      "fileName": "mc-ev-worldsync-1.0.0.jar",
+      "destination": "{minecraft-instance}/mods/",
+      "game": "minecraft-java",
+      "kind": "mod"
+    },
+    {
+      "fileName": "UE4SS.dll",
+      "destination": "{game:custom-endorphin-vice}/Binaries/Win64/",
+      "game": "custom-endorphin-vice",
+      "kind": "loader"
+    },
+    {
+      "fileName": "UE4SS-settings.ini",
+      "destination": "{game:custom-endorphin-vice}/Binaries/Win64/",
+      "game": "custom-endorphin-vice",
+      "kind": "config"
+    },
+    {
+      "fileName": "Mods/mc_ev_worldsync/mc_ev_worldsync.lua",
+      "destination": "{game:custom-endorphin-vice}/Binaries/Win64/Mods/mc_ev_worldsync/",
+      "game": "custom-endorphin-vice",
+      "kind": "mod"
+    },
+    {
+      "fileName": "Mods/mc_ev_worldsync/mod.json",
+      "destination": "{game:custom-endorphin-vice}/Binaries/Win64/Mods/mc_ev_worldsync/",
+      "game": "custom-endorphin-vice",
+      "kind": "config"
+    },
+    {
+      "fileName": "Mods/shared/UEHelpers/UEHelpers.lua",
+      "destination": "{game:custom-endorphin-vice}/Binaries/Win64/Mods/shared/UEHelpers/",
+      "game": "custom-endorphin-vice",
+      "kind": "lib"
+    },
+    {
+      "fileName": "Mods/shared/jsbProfiler/jsbProfi.lua",
+      "destination": "{game:custom-endorphin-vice}/Binaries/Win64/Mods/shared/jsbProfiler/",
+      "game": "custom-endorphin-vice",
+      "kind": "lib"
+    }
+  ],
+  "launch": {
+    "primary": {
+      "game": "minecraft-java",
+      "instance": "mc-ev-worldsync",
+      "args": ["-Dmc.ev.pipe=minecraft_ev_sync"]
+    },
+    "companion": {
+      "game": "custom-endorphin-vice",
+      "exe": "{game:custom-endorphin-vice}/Binaries/Win64/EndorphinVice-Win64-Shipping.exe",
+      "args": [],
+      "env": {
+        "MC_EV_PIPE": "minecraft_ev_sync"
+      }
+    }
+  },
+  "multiplayer": null,
+  "license": "All-Rights-Reserved",
+  "credits": [
+    {
+      "name": "qzmin",
+      "role": "author"
+    },
+    {
+      "name": "UE4SS Team",
+      "role": "loader",
+      "url": "https://github.com/UE4SS-RE/RE-UE4SS"
+    },
+    {
+      "name": "FabricMC",
+      "role": "loader",
+      "url": "https://fabricmc.net/"
+    }
+  ],
+  "remix": false,
+  "tags": ["world-sync", "physics", "cross-game", "sandbox"]
+}
