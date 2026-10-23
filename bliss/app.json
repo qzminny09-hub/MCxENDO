@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Bliss",
+    "slug": "bliss",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#EEF2EE"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.qzminny.bliss"
+    },
+    "android": {
+      "package": "com.qzminny.bliss",
+      "adaptiveIcon": {
+        "backgroundColor": "#EEF2EE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
