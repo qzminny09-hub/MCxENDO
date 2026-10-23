@@ -1,6 +1,6 @@
 # Bliss
 
-A blank Android/iOS app built with Expo (React Native).
+A physics playground for Android, built with Expo (React Native): Cloth, Water and Sand modes.
 
 ## Get it on an Android phone
 
@@ -20,4 +20,8 @@ npm install
 npx expo start
 ```
 
-The screen lives in `App.js`. App name, icon and package id are in `app.json`.
+- `App.js` lists the modes and switches between the home screen and a sim.
+- `src/sims/` holds each simulation as a self-contained canvas page (`cloth.js`, `water.js`,
+  `sand.js`) built on `shell.js`, which provides the toolbar and the bridge to the app.
+- `src/SimScreen.js` shows a sim in a WebView and handles back, haptics and tilt.
+- App name, icon and package id are in `app.json`.

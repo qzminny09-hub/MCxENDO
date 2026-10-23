@@ -4,11 +4,13 @@ import {
   Animated,
   Easing,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
   useColorScheme,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const themes = {
   light: {
@@ -21,9 +23,10 @@ const themes = {
   },
 };
 
-export default function HomeScreen({ onOpenCloth }) {
+export default function HomeScreen({ modes, onOpen }) {
   const scheme = useColorScheme();
   const theme = scheme === 'dark' ? themes.dark : themes.light;
+  const insets = useSafeAreaInsets();
   const breath = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -45,7 +48,10 @@ export default function HomeScreen({ onOpenCloth }) {
   const opacity = breath.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] });
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+    <ScrollView
+      style={{ backgroundColor: theme.bg }}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
+    >
       <View style={styles.hero}>
         <Animated.View
           pointerEvents="none"
@@ -56,67 +62,71 @@ export default function HomeScreen({ onOpenCloth }) {
         <Text style={[styles.title, { color: theme.fg }]}>Bliss</Text>
       </View>
 
-      <Pressable
-        onPress={onOpenCloth}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.card, { backgroundColor: theme.card, opacity: pressed ? 0.85 : 1 }]}
-      >
-        <Text style={[styles.cardLabel, { color: theme.cardMuted }]}>SIMULATION</Text>
-        <Text style={[styles.cardTitle, { color: theme.cardFg }]}>Cloth</Text>
-        <Text style={[styles.cardBody, { color: theme.cardMuted }]}>Pull it, stretch it, rip it apart.</Text>
-      </Pressable>
-    </View>
+      <View style={styles.cards}>
+        {modes.map((mode) => (
+          <Pressable
+            key={mode.key}
+            onPress={() => onOpen(mode.key)}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.card, { backgroundColor: theme.card, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text style={[styles.cardTitle, { color: theme.cardFg }]}>{mode.title}</Text>
+            <Text style={[styles.cardBody, { color: theme.cardMuted }]}>{mode.body}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    gap: 48,
+    gap: 32,
   },
   hero: {
-    width: 300,
-    height: 300,
+    width: 220,
+    height: 220,
     alignItems: 'center',
     justifyContent: 'center',
   },
   glow: {
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     alignItems: 'center',
     justifyContent: 'center',
   },
   core: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     opacity: 0.35,
   },
   title: {
     fontFamily: 'serif',
-    fontSize: 84,
+    fontSize: 72,
     letterSpacing: 3,
   },
-  card: {
+  cards: {
     alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 12,
+  },
+  card: {
+    width: '100%',
     maxWidth: 420,
     borderRadius: 20,
-    paddingVertical: 20,
+    paddingVertical: 18,
     paddingHorizontal: 22,
     gap: 4,
   },
-  cardLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1.6,
-  },
   cardTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '600',
   },
   cardBody: {
