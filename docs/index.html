@@ -52,6 +52,32 @@
   #start p { margin: 0; color: var(--muted); }
   #start button { font-size: 18px; padding: 14px 20px; background: var(--accent); color: var(--bg); }
   #msg { color: #ffb4a2; min-height: 1.4em; }
+  #extra { display: flex; gap: 6px; }
+  #extra button.live { background: #ff4d6d; color: #fff; }
+
+  /* Animation studio */
+  #studio { position: fixed; inset: 0; z-index: 4; background: var(--bg); overflow-y: auto;
+    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  #studio .wrap { max-width: 560px; margin: 0 auto; display: grid; gap: 12px; }
+  #studio header { display: flex; justify-content: space-between; align-items: center; }
+  #studio h2 { margin: 0; font-size: 20px; }
+  #studio .row { flex-wrap: wrap; }
+  #studio label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  #studio select, #studio input[type=text] { font: inherit; color: var(--fg); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.15); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+  #studio input[type=text] { flex: 1; }
+  #studio .primary { background: var(--accent); color: var(--bg); }
+  #studio .danger { color: #ffb4a2; }
+  #board { width: 100%; aspect-ratio: 1; max-height: 58vh; max-width: 58vh; justify-self: center; border-radius: 14px;
+    background: #1a2129; touch-action: none; display: block; }
+  .swatch { width: 34px; height: 34px; padding: 0; border-radius: 50%; border: 3px solid transparent; }
+  .swatch.on { border-color: var(--fg); }
+  .tool.on { background: var(--fg); color: var(--bg); }
+  #frames { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  #frames canvas { width: 64px; height: 64px; border-radius: 8px; background: #1a2129; flex: none; border: 3px solid transparent; cursor: pointer; }
+  #frames canvas.on { border-color: var(--accent); }
+  #frames button { width: 64px; height: 64px; flex: none; font-size: 26px; }
+  .note { color: var(--muted); font-size: 13px; margin: 0; }
 </style>
 </head>
 <body>
@@ -74,7 +100,52 @@
   <div id="tip">Hold 🤘 to switch mode</div>
   <div class="row">
     <div class="modes" id="modes"></div>
+    <div id="extra"></div>
     <button id="flip" type="button" aria-label="Switch camera">🔄</button>
+  </div>
+</div>
+
+<div id="studio" hidden>
+  <div class="wrap">
+    <header>
+      <h2>Animation Studio</h2>
+      <button class="primary" id="studioDone" type="button">Done</button>
+    </header>
+    <div class="row">
+      <select id="animSel" aria-label="Animation"></select>
+      <button id="animNew" type="button">+ New</button>
+      <button id="animDel" class="danger" type="button">Delete</button>
+    </div>
+    <div class="row">
+      <input id="animName" type="text" aria-label="Animation name" placeholder="Name">
+      <label>Plays on <select id="animGesture"></select></label>
+    </div>
+    <canvas id="board"></canvas>
+    <div class="row" id="swatches"></div>
+    <div class="row">
+      <button class="tool on" data-size="0.015" type="button">Thin</button>
+      <button class="tool" data-size="0.035" type="button">Medium</button>
+      <button class="tool" data-size="0.07" type="button">Thick</button>
+      <button id="eraser" type="button">Eraser</button>
+      <button id="undo" type="button">Undo</button>
+      <button id="clearFrame" class="danger" type="button">Clear</button>
+    </div>
+    <div id="frames"></div>
+    <div class="row">
+      <label>Keyframe shows for <select id="frameDur">
+        <option value="80">0.08 s</option><option value="150">0.15 s</option><option value="250">0.25 s</option>
+        <option value="400">0.4 s</option><option value="700">0.7 s</option><option value="1000">1 s</option><option value="2000">2 s</option>
+      </select></label>
+      <button id="frameDel" class="danger" type="button">Delete frame</button>
+    </div>
+    <div class="row">
+      <label><input id="smooth" type="checkbox"> Smooth (blend between keyframes)</label>
+      <label><input id="onion" type="checkbox" checked> Show previous frame</label>
+    </div>
+    <div class="row">
+      <button id="play" class="primary" type="button">▶ Play</button>
+    </div>
+    <p class="note">Draw with your finger. + copies the current frame so you can change it a little for the next one. Then pick a hand signal and use the My Animations mode: it plays on your hand when you make that signal.</p>
   </div>
 </div>
 
@@ -105,7 +176,8 @@ const MODES = [
   { id: "draw", name: "Air Draw", help: "☝️ draw · ✌️ new color · ✊ lift pen · hold 🖐 to clear" },
   { id: "pop", name: "Bubble Pop", help: "Pop the bubbles with your fingertips" },
   { id: "music", name: "Finger Piano", help: "Pinch your thumb to each finger to play a note" },
-  { id: "magic", name: "Magic", help: "Move your fingers for sparkles · ✊ for a blast" },
+  { id: "magic", name: "Magic", help: "Say a spell: fireball · lightning · freeze · lumos · nox · leviosa · expelliarmus · rainbow · heal · storm · abracadabra" },
+  { id: "anim", name: "My Animations", help: "Make a hand signal to play the animation linked to it · ✏️ to draw your own" },
   { id: "slice", name: "Fruit Slice", help: "Swipe your finger fast to slice fruit · avoid the 💣" },
   { id: "force", name: "Force Push", help: "🖐 pushes the orbs away · ✊ pulls them in" },
   { id: "rps", name: "Rock Paper Scissors", help: "Make a fist to start, then throw your move on \"Shoot!\"" },
@@ -380,8 +452,18 @@ function processHands(now) {
 }
 
 function setMode(i) {
+  if (i !== mode) MODE_HOOKS[MODES[mode].id]?.leave?.();
   mode = i;
   const m = MODES[mode];
+  const extra = document.getElementById("extra");
+  extra.replaceChildren();
+  for (const [text, fn, id] of MODE_HOOKS[m.id]?.buttons?.() ?? []) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = text;
+    if (id) b.id = id;
+    b.addEventListener("click", fn);
+    extra.appendChild(b);
+  }
   document.getElementById("modeName").textContent = m.name;
   document.getElementById("help").textContent = m.help;
   document.querySelectorAll("#modes button").forEach((b, k) => b.classList.toggle("on", k === mode));
@@ -783,6 +865,507 @@ const MODE_HOOKS = {
   },
 };
 
+// ---------- voice spells (Magic mode) ----------
+
+let mic = { on: false, status: "", heard: "", heardAt: 0, cast: new Set() };
+let fx = { lumos: 0, dark: 0, frost: 0, rainbow: 0, rain: 0 };
+let fireballs = [], bolts = [], flash = 0;
+let webRecognizer = null;
+
+function castOrigin() {
+  const h = hands[0];
+  return h ? { x: h.pts[9].x, y: h.pts[9].y, h } : { x: canvas.width / 2, y: canvas.height * 0.75, h: null };
+}
+
+function lightningBolt(to) {
+  const pts = [{ x: to.x + rand(-0.3, 0.3) * canvas.width, y: 0 }];
+  const n = 12;
+  for (let k = 1; k <= n; k++) {
+    const t = k / n;
+    pts.push({ x: pts[0].x + (to.x - pts[0].x) * t + (k < n ? rand(-40, 40) * dpr : 0), y: to.y * t });
+  }
+  bolts.push({ pts, t: 0 });
+  flash = 1;
+  noise({ dur: 1.4, vol: 0.6, filter: "lowpass", freq: 300 });
+  buzz(80);
+}
+
+const SPELLS = [
+  { name: "Fireball", words: ["fireball", "fire ball", "fire", "incendio", "inferno"], color: "#fb5607", cast(o) {
+    const h = o.h;
+    let dir = { x: canvas.width / 2 - o.x, y: canvas.height * 0.2 - o.y };
+    if (h && h.gesture === "point") dir = { x: h.pts[8].x - h.pts[5].x, y: h.pts[8].y - h.pts[5].y };
+    const len = Math.hypot(dir.x, dir.y) || 1;
+    fireballs.push({ x: o.x, y: o.y, vx: dir.x / len * 900 * dpr, vy: dir.y / len * 900 * dpr, t: 0 });
+    noise({ dur: 0.8, vol: 0.4, filter: "bandpass", freq: 500, q: 0.5 });
+  } },
+  { name: "Lightning", words: ["lightning", "thunder", "zap", "fulgur"], color: "#bde0fe", cast(o) {
+    lightningBolt(o);
+    setTimeout(() => lightningBolt(castOrigin()), 250);
+    setTimeout(() => lightningBolt(castOrigin()), 550);
+  } },
+  { name: "Freeze", words: ["freeze", "frozen", "ice", "frost", "glacius"], color: "#a2d2ff", cast(o) {
+    fx.frost = performance.now() + 6000;
+    for (let k = 0; k < 40; k++) float(rand(0, canvas.width), rand(-300, 0) * dpr, { emoji: ["❄️"], size: 22, vy: 2, spread: 1, life: 200 });
+    tone(1600, { type: "sine", dur: 1.2, vol: 0.12 }); tone(2100, { type: "sine", dur: 1.4, vol: 0.08 });
+  } },
+  { name: "Lumos", words: ["lumos", "light"], color: "#fff3b0", cast() {
+    fx.lumos = performance.now() + 10000; fx.dark = 0;
+    tone(880, { type: "sine", dur: 0.8, vol: 0.15 }); tone(1320, { type: "sine", dur: 1, vol: 0.1 });
+  } },
+  { name: "Nox", words: ["nox", "darkness", "dark"], color: "#8a97a6", cast() {
+    fx.dark = performance.now() + 8000; fx.lumos = 0;
+    tone(160, { type: "sine", slide: 0.5, dur: 1, vol: 0.25 });
+  } },
+  { name: "Leviosa", words: ["leviosa", "wingardium leviosa", "levitate", "float"], color: "#cdb4db", cast() {
+    for (let k = 0; k < 35; k++) float(rand(0, canvas.width), canvas.height + rand(0, 200) * dpr, { emoji: ["🪶", "⭐", "✨"], size: 24, vy: -2, spread: 0.6, life: 240 });
+    tone(523, { type: "sine", slide: 2, dur: 1.2, vol: 0.15 });
+  } },
+  { name: "Expelliarmus", words: ["expelliarmus", "blast", "boom", "push"], color: "#ff4d6d", cast(o) {
+    ring(o.x, o.y, "#ff4d6d", 400); ring(o.x, o.y, "#ffffff", 260);
+    burst(o.x, o.y, { count: 80, colors: ["#ff4d6d", "#fff", "#ffbe0b"], speed: 16, gravity: 0, size: 5, life: 50 });
+    noise({ dur: 0.5, vol: 0.5, filter: "lowpass", freq: 900 }); buzz(100);
+  } },
+  { name: "Rainbow", words: ["rainbow"], color: "#7ae582", cast() {
+    fx.rainbow = performance.now() + 5000;
+    [523, 659, 784, 1047].forEach((f, k) => setTimeout(() => tone(f, { dur: 0.5 }), k * 110));
+  } },
+  { name: "Heal", words: ["heal", "love", "heart"], color: "#ff8fab", cast(o) {
+    for (let k = 0; k < 24; k++) float(o.x, o.y, { emoji: ["💖", "💚", "✨"], size: 26, vy: -3, spread: 2.5, life: 100 });
+    tone(659, { dur: 0.6, vol: 0.2 }); tone(988, { dur: 0.8, vol: 0.15 });
+  } },
+  { name: "Storm", words: ["storm", "rain"], color: "#90e0ef", cast() {
+    fx.rain = performance.now() + 7000;
+    noise({ dur: 3, vol: 0.2, filter: "highpass", freq: 2000 });
+    setTimeout(() => lightningBolt({ x: rand(0, canvas.width), y: canvas.height * 0.7 }), 1200);
+  } },
+  { name: "Abracadabra", words: ["abracadabra", "magic", "shazam", "alakazam"], color: "#ffd60a", cast() {
+    for (let k = 0; k < 6; k++) setTimeout(() => {
+      const x = rand(0.15, 0.85) * canvas.width, y = rand(0.2, 0.7) * canvas.height;
+      burst(x, y, { count: 40, colors: CONFETTI, speed: 10, size: 6 });
+      burst(x, y, { count: 6, emoji: ["⭐", "🌟"], speed: 6, size: 26, life: 70 });
+      tone(600 + k * 120, { dur: 0.2 });
+    }, k * 150);
+  } },
+];
+// Longest phrases first so "fire ball" wins over "fire"
+const SPELL_WORDS = SPELLS.flatMap(s => s.words.map(w => [w, s])).sort((a, b) => b[0].length - a[0].length);
+
+function hearSpeech(type, text) {
+  if (type === "ready") { mic.status = "listening"; return; }
+  if (type === "denied") { mic.on = false; mic.status = "denied"; updateMicButton(); return; }
+  if (type !== "partial" && type !== "final") return;
+  const said = (text || "").toLowerCase();
+  if (said) { mic.heard = said; mic.heardAt = performance.now(); }
+  for (const [word, spell] of SPELL_WORDS) {
+    if (mic.cast.has(spell.name)) continue;
+    if (new RegExp(`\\b${word}\\b`).test(said)) {
+      mic.cast.add(spell.name);
+      if (MODES[mode].id !== "magic") continue;
+      spell.cast(castOrigin());
+      say(`${spell.name}!`, spell.color);
+    }
+  }
+  if (type === "final") mic.cast = new Set();
+}
+window.onNativeSpeech = hearSpeech;
+
+function startMic() {
+  mic.on = true; mic.status = "starting"; mic.cast = new Set();
+  if (window.AndroidSpeech?.isAvailable?.()) { window.AndroidSpeech.start(); updateMicButton(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { mic.on = false; mic.status = "unavailable"; updateMicButton(); return; }
+  if (!webRecognizer) {
+    webRecognizer = new SR();
+    webRecognizer.continuous = true;
+    webRecognizer.interimResults = true;
+    webRecognizer.onstart = () => hearSpeech("ready", "");
+    webRecognizer.onresult = (e) => {
+      const r = e.results[e.results.length - 1];
+      hearSpeech(r.isFinal ? "final" : "partial", r[0].transcript);
+    };
+    webRecognizer.onerror = (e) => { if (e.error === "not-allowed") hearSpeech("denied", ""); };
+    webRecognizer.onend = () => { if (mic.on) try { webRecognizer.start(); } catch {} };
+  }
+  try { webRecognizer.start(); } catch {}
+  updateMicButton();
+}
+
+function stopMic() {
+  mic.on = false; mic.status = "";
+  window.AndroidSpeech?.stop?.();
+  try { webRecognizer?.stop(); } catch {}
+  updateMicButton();
+}
+
+function updateMicButton() {
+  const b = document.getElementById("micBtn");
+  if (!b) return;
+  b.textContent = mic.on ? "🎤 On" : "🎤 Off";
+  b.classList.toggle("live", mic.on);
+}
+
+MODE_HOOKS.magic = {
+  buttons: () => [["🎤 Off", () => (mic.on ? stopMic() : startMic()), "micBtn"]],
+  reset() { startMic(); },
+  leave() { stopMic(); fx = { lumos: 0, dark: 0, frost: 0, rainbow: 0, rain: 0 }; fireballs = []; bolts = []; },
+  draw(dt, now) {
+    const W = canvas.width, H = canvas.height;
+    if (fx.dark > now) { ctx.fillStyle = "rgba(2,4,12,.82)"; ctx.fillRect(0, 0, W, H); }
+    if (fx.frost > now) {
+      const a = Math.min(1, (fx.frost - now) / 1000);
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
+      g.addColorStop(0, `rgba(160,210,255,${0.12 * a})`); g.addColorStop(1, `rgba(235,248,255,${0.75 * a})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    if (fx.rainbow > now) {
+      const a = Math.min(1, (fx.rainbow - now) / 1000);
+      const bands = ["#ff595e", "#ff924c", "#ffca3a", "#8ac926", "#1982c4", "#4267ac", "#6a4c93"];
+      ctx.globalAlpha = 0.55 * a;
+      bands.forEach((c, k) => {
+        ctx.strokeStyle = c; ctx.lineWidth = 16 * dpr;
+        ctx.beginPath(); ctx.arc(W / 2, H * 0.85, W * 0.48 - k * 16 * dpr, Math.PI, 0); ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    }
+    if (fx.rain > now) {
+      ctx.strokeStyle = "rgba(180,220,255,.6)"; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      for (let k = 0; k < 120; k++) {
+        const x = (k * 97.3 + now * 0.9 * dpr) % W, y = (k * 211.7 + now * 1.6 * dpr) % H;
+        ctx.moveTo(x, y); ctx.lineTo(x - 6 * dpr, y + 22 * dpr);
+      }
+      ctx.stroke();
+    }
+    if (fx.lumos > now) {
+      const lights = hands.length ? hands.map(h => h.pts[8]) : [castOrigin()];
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (const p of lights) {
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 200 * dpr);
+        g.addColorStop(0, "rgba(255,250,220,.95)"); g.addColorStop(0.25, "rgba(255,240,170,.45)"); g.addColorStop(1, "rgba(255,240,170,0)");
+        ctx.fillStyle = g; ctx.fillRect(p.x - 200 * dpr, p.y - 200 * dpr, 400 * dpr, 400 * dpr);
+      }
+      ctx.restore();
+    }
+    fireballs = fireballs.filter(f => {
+      f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt;
+      for (let k = 0; k < 3; k++) float(f.x, f.y, { colors: ["#ffbe0b", "#fb5607", "#ff006e"], size: 9, vy: rand(-1, 1), spread: 2, life: 25 });
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, 34 * dpr);
+      g.addColorStop(0, "#fff"); g.addColorStop(0.3, "#ffd60a"); g.addColorStop(0.7, "rgba(251,86,7,.8)"); g.addColorStop(1, "rgba(251,86,7,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, 34 * dpr, 0, Math.PI * 2); ctx.fill();
+      const gone = f.t > 1.6 || f.x < 0 || f.x > W || f.y < 0 || f.y > H;
+      if (gone) {
+        const x = Math.max(0, Math.min(W, f.x)), y = Math.max(0, Math.min(H, f.y));
+        ring(x, y, "#fb5607", 300);
+        burst(x, y, { count: 70, colors: ["#ffbe0b", "#fb5607", "#ff006e", "#fff"], speed: 14, size: 6 });
+        noise({ dur: 0.7, vol: 0.6, filter: "lowpass", freq: 500 }); buzz(120);
+      }
+      return !gone;
+    });
+    bolts = bolts.filter(b => {
+      b.t += dt;
+      if (b.t > 0.35) return false;
+      ctx.save();
+      ctx.globalAlpha = 1 - b.t / 0.35;
+      ctx.shadowColor = "#bde0fe"; ctx.shadowBlur = 25 * dpr;
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 5 * dpr; ctx.lineJoin = "round";
+      ctx.beginPath(); b.pts.forEach((p, k) => (k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke();
+      ctx.restore();
+      return true;
+    });
+    if (flash > 0) { ctx.fillStyle = `rgba(230,240,255,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); flash = Math.max(0, flash - dt * 4); }
+
+    const status = mic.status === "denied" ? "Microphone blocked: allow it for this app in your phone settings"
+      : mic.status === "unavailable" ? "Voice spells aren't available on this device"
+      : !mic.on ? "Tap 🎤 to cast spells with your voice"
+      : now - mic.heardAt < 2500 ? `🎤 “${mic.heard}”` : "🎤 Listening… say a spell";
+    label(status, W / 2, H * 0.68, 16, "#fff", 600);
+  },
+};
+
+// ---------- animation studio ----------
+
+const ANIM_GESTURES = ["open", "fist", "peace", "point", "ok", "up", "down"];
+const GESTURE_NAMES = { open: "🖐 Open hand", fist: "✊ Fist", peace: "✌️ Peace", point: "☝️ Point", ok: "👌 OK", up: "👍 Thumbs up", down: "👎 Thumbs down" };
+const INK = ["#ffffff", "#ff006e", "#fb5607", "#ffbe0b", "#7ae582", "#4cc9f0", "#8338ec", "#111111"];
+
+let anims = loadAnims();
+let studio = { anim: 0, frame: 0, color: INK[1], size: 0.015, erase: false, stroke: null, playing: false, playStart: 0 };
+const frameCache = new WeakMap();
+
+function exampleAnims() {
+  const heart = (s) => {
+    const p = [];
+    for (let k = 0; k <= 40; k++) {
+      const t = k / 40 * Math.PI * 2;
+      p.push(0.5 + 16 * Math.pow(Math.sin(t), 3) / 16 * s, 0.48 - (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 16 * s);
+    }
+    return p;
+  };
+  const sun = (rot) => {
+    const strokes = [{ c: "#ffbe0b", s: 0.07, e: false, p: (() => { const p = []; for (let k = 0; k <= 30; k++) { const t = k / 30 * Math.PI * 2; p.push(0.5 + Math.cos(t) * 0.14, 0.5 + Math.sin(t) * 0.14); } return p; })() }];
+    for (let k = 0; k < 8; k++) {
+      const t = rot + k / 8 * Math.PI * 2;
+      strokes.push({ c: "#fb5607", s: 0.035, e: false, p: [0.5 + Math.cos(t) * 0.24, 0.5 + Math.sin(t) * 0.24, 0.5 + Math.cos(t) * 0.38, 0.5 + Math.sin(t) * 0.38] });
+    }
+    return strokes;
+  };
+  return [
+    { name: "Heartbeat (example)", gesture: "peace", smooth: true,
+      frames: [0.28, 0.36, 0.42, 0.34].map(s => ({ dur: 150, strokes: [{ c: "#ff006e", s: 0.05, e: false, p: heart(s) }] })) },
+    { name: "Spinning sun (example)", gesture: "up", smooth: false,
+      frames: [0, 1, 2, 3].map(k => ({ dur: 80, strokes: sun(k / 4 * Math.PI / 4) })) },
+  ];
+}
+
+function loadAnims() {
+  try {
+    const saved = JSON.parse(store("handAnims") || "null");
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch {}
+  return exampleAnims();
+}
+function saveAnims() { store("handAnims", JSON.stringify(anims)); }
+
+function drawStrokes(c, strokes, size) {
+  c.lineCap = "round"; c.lineJoin = "round";
+  for (const s of strokes) {
+    c.globalCompositeOperation = s.e ? "destination-out" : "source-over";
+    c.strokeStyle = s.c; c.fillStyle = s.c; c.lineWidth = s.s * size;
+    const p = s.p;
+    if (p.length <= 2) { c.beginPath(); c.arc(p[0] * size, p[1] * size, s.s * size / 2, 0, Math.PI * 2); c.fill(); continue; }
+    c.beginPath(); c.moveTo(p[0] * size, p[1] * size);
+    for (let k = 2; k < p.length; k += 2) c.lineTo(p[k] * size, p[k + 1] * size);
+    c.stroke();
+  }
+  c.globalCompositeOperation = "source-over";
+}
+
+// Each frame is kept as strokes and rendered once to a cached canvas until it's edited
+function frameImage(frame, extra = null) {
+  let img = frameCache.get(frame);
+  if (!img || extra) {
+    img = img || document.createElement("canvas");
+    img.width = img.height = 512;
+    const c = img.getContext("2d");
+    c.clearRect(0, 0, 512, 512);
+    drawStrokes(c, extra ? [...frame.strokes, extra] : frame.strokes, 512);
+    frameCache.set(frame, img);
+    if (extra) frameCache.delete(frame);
+  }
+  return img;
+}
+
+// Which keyframe shows at time t (ms), and how far it has blended toward the next one
+function frameAt(anim, t) {
+  const total = anim.frames.reduce((s, f) => s + f.dur, 0) || 1;
+  let tt = t % total;
+  for (let k = 0; k < anim.frames.length; k++) {
+    const f = anim.frames[k];
+    if (tt < f.dur) return { k, blend: anim.smooth ? tt / f.dur : 0 };
+    tt -= f.dur;
+  }
+  return { k: 0, blend: 0 };
+}
+
+function drawAnim(c, anim, t, x, y, size) {
+  if (!anim.frames.length) return;
+  const { k, blend } = frameAt(anim, t);
+  const next = anim.frames[(k + 1) % anim.frames.length];
+  c.globalAlpha = 1 - blend;
+  c.drawImage(frameImage(anim.frames[k]), x - size / 2, y - size / 2, size, size);
+  if (blend > 0) { c.globalAlpha = blend; c.drawImage(frameImage(next), x - size / 2, y - size / 2, size, size); }
+  c.globalAlpha = 1;
+}
+
+const board = document.getElementById("board");
+const bctx = board.getContext("2d");
+const cur = () => anims[studio.anim];
+const curFrame = () => cur().frames[studio.frame];
+
+function renderBoard() {
+  const r = board.getBoundingClientRect();
+  const px = Math.round(r.width * (window.devicePixelRatio || 1));
+  if (board.width !== px) board.width = board.height = px;
+  bctx.clearRect(0, 0, px, px);
+  const a = cur();
+  if (studio.playing) {
+    drawAnim(bctx, a, performance.now() - studio.playStart, px / 2, px / 2, px);
+    return;
+  }
+  if (document.getElementById("onion").checked && studio.frame > 0) {
+    bctx.globalAlpha = 0.25;
+    bctx.drawImage(frameImage(a.frames[studio.frame - 1]), 0, 0, px, px);
+    bctx.globalAlpha = 1;
+  }
+  bctx.drawImage(frameImage(curFrame(), studio.stroke), 0, 0, px, px);
+}
+
+function renderFrames() {
+  const el = document.getElementById("frames");
+  el.replaceChildren();
+  cur().frames.forEach((f, k) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    c.getContext("2d").drawImage(frameImage(f), 0, 0, 128, 128);
+    c.className = k === studio.frame ? "on" : "";
+    c.title = `Frame ${k + 1}`;
+    c.addEventListener("click", () => { studio.frame = k; refreshStudio(); });
+    el.appendChild(c);
+  });
+  const add = document.createElement("button");
+  add.type = "button"; add.textContent = "+"; add.setAttribute("aria-label", "Add frame (copies this one)");
+  add.addEventListener("click", () => {
+    const f = curFrame();
+    cur().frames.splice(studio.frame + 1, 0, { dur: f.dur, strokes: JSON.parse(JSON.stringify(f.strokes)) });
+    studio.frame++;
+    saveAnims(); refreshStudio();
+    el.lastChild.scrollIntoView({ inline: "end", block: "nearest" });
+  });
+  el.appendChild(add);
+}
+
+function refreshStudio() {
+  const a = cur();
+  studio.frame = Math.min(studio.frame, a.frames.length - 1);
+  const sel = document.getElementById("animSel");
+  sel.replaceChildren(...anims.map((x, k) => new Option(x.name || `Animation ${k + 1}`, k)));
+  sel.value = studio.anim;
+  document.getElementById("animName").value = a.name;
+  const gsel = document.getElementById("animGesture");
+  gsel.replaceChildren(new Option("Nothing", ""), ...ANIM_GESTURES.map(g => new Option(GESTURE_NAMES[g], g)));
+  gsel.value = a.gesture || "";
+  document.getElementById("frameDur").value = String(curFrame().dur);
+  document.getElementById("smooth").checked = !!a.smooth;
+  renderFrames();
+  renderBoard();
+}
+
+function openStudio() {
+  document.getElementById("studio").hidden = false;
+  refreshStudio();
+}
+
+function boardPoint(e) {
+  const r = board.getBoundingClientRect();
+  return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))];
+}
+board.addEventListener("pointerdown", (e) => {
+  if (studio.playing) return;
+  board.setPointerCapture(e.pointerId);
+  studio.stroke = { c: studio.color, s: studio.size, e: studio.erase, p: boardPoint(e) };
+  renderBoard();
+});
+board.addEventListener("pointermove", (e) => {
+  if (!studio.stroke) return;
+  studio.stroke.p.push(...boardPoint(e).map(v => Math.round(v * 1000) / 1000));
+  renderBoard();
+});
+const endStroke = () => {
+  if (!studio.stroke) return;
+  curFrame().strokes.push(studio.stroke);
+  studio.stroke = null;
+  frameCache.delete(curFrame());
+  saveAnims(); renderBoard(); renderFrames();
+};
+board.addEventListener("pointerup", endStroke);
+board.addEventListener("pointercancel", endStroke);
+
+const swatches = document.getElementById("swatches");
+INK.forEach((c, k) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "swatch" + (k === 1 ? " on" : "");
+  b.style.background = c; b.setAttribute("aria-label", `Color ${c}`);
+  b.addEventListener("click", () => {
+    studio.color = c; studio.erase = false;
+    document.getElementById("eraser").classList.remove("tool", "on");
+    swatches.querySelectorAll(".swatch").forEach(s => s.classList.toggle("on", s === b));
+  });
+  swatches.appendChild(b);
+});
+document.querySelectorAll("#studio [data-size]").forEach(b => b.addEventListener("click", () => {
+  studio.size = Number(b.dataset.size);
+  document.querySelectorAll("#studio [data-size]").forEach(x => x.classList.toggle("on", x === b));
+}));
+document.getElementById("eraser").addEventListener("click", (e) => {
+  studio.erase = !studio.erase;
+  e.currentTarget.classList.toggle("tool", studio.erase);
+  e.currentTarget.classList.toggle("on", studio.erase);
+});
+document.getElementById("undo").addEventListener("click", () => {
+  curFrame().strokes.pop(); frameCache.delete(curFrame()); saveAnims(); renderBoard(); renderFrames();
+});
+document.getElementById("clearFrame").addEventListener("click", () => {
+  curFrame().strokes = []; frameCache.delete(curFrame()); saveAnims(); renderBoard(); renderFrames();
+});
+document.getElementById("frameDel").addEventListener("click", () => {
+  const a = cur();
+  if (a.frames.length > 1) a.frames.splice(studio.frame, 1);
+  else a.frames[0].strokes = [];
+  studio.frame = Math.max(0, studio.frame - 1);
+  saveAnims(); refreshStudio();
+});
+document.getElementById("frameDur").addEventListener("change", (e) => { curFrame().dur = Number(e.target.value); saveAnims(); });
+document.getElementById("smooth").addEventListener("change", (e) => { cur().smooth = e.target.checked; saveAnims(); });
+document.getElementById("onion").addEventListener("change", renderBoard);
+document.getElementById("animSel").addEventListener("change", (e) => { studio.anim = Number(e.target.value); studio.frame = 0; refreshStudio(); });
+document.getElementById("animName").addEventListener("input", (e) => {
+  cur().name = e.target.value; saveAnims();
+  document.getElementById("animSel").options[studio.anim].text = e.target.value || `Animation ${studio.anim + 1}`;
+});
+document.getElementById("animGesture").addEventListener("change", (e) => {
+  // Each hand signal plays one animation, so taking a signal frees it from any other animation
+  for (const a of anims) if (a !== cur() && a.gesture === e.target.value) a.gesture = "";
+  cur().gesture = e.target.value; saveAnims();
+});
+document.getElementById("animNew").addEventListener("click", () => {
+  anims.push({ name: `Animation ${anims.length + 1}`, gesture: "", smooth: false, frames: [{ dur: 150, strokes: [] }] });
+  studio.anim = anims.length - 1; studio.frame = 0;
+  saveAnims(); refreshStudio();
+});
+document.getElementById("animDel").addEventListener("click", (e) => {
+  const b = e.currentTarget;
+  // Ask once on the button itself, since the app can't show confirm dialogs
+  if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again to delete"; setTimeout(() => { b.dataset.armed = ""; b.textContent = "Delete"; }, 2500); return; }
+  b.dataset.armed = ""; b.textContent = "Delete";
+  anims.splice(studio.anim, 1);
+  if (!anims.length) anims.push({ name: "Animation 1", gesture: "", smooth: false, frames: [{ dur: 150, strokes: [] }] });
+  studio.anim = Math.max(0, studio.anim - 1); studio.frame = 0;
+  saveAnims(); refreshStudio();
+});
+document.getElementById("play").addEventListener("click", (e) => {
+  studio.playing = !studio.playing;
+  studio.playStart = performance.now();
+  e.currentTarget.textContent = studio.playing ? "■ Stop" : "▶ Play";
+  const tick = () => { if (!studio.playing) { renderBoard(); return; } renderBoard(); requestAnimationFrame(tick); };
+  tick();
+});
+document.getElementById("studioDone").addEventListener("click", () => {
+  studio.playing = false; document.getElementById("play").textContent = "▶ Play";
+  document.getElementById("studio").hidden = true;
+});
+
+MODE_HOOKS.anim = {
+  buttons: () => [["✏️ Studio", openStudio]],
+  draw(dt, now) {
+    const W = canvas.width, H = canvas.height;
+    let playing = 0;
+    for (const h of hands) {
+      const a = anims.find(x => x.gesture && x.gesture === h.gesture);
+      if (!a) continue;
+      playing++;
+      const st = handState[h.label];
+      drawAnim(ctx, a, now - (st?.since ?? now), h.pts[9].x, h.pts[9].y, h.size * 3.2);
+    }
+    if (!playing) {
+      const linked = anims.filter(a => a.gesture);
+      const lines = linked.length ? linked.map(a => `${EMOJI[a.gesture]}  ${a.name}`) : ["No animations linked yet", "Tap ✏️ Studio to draw one"];
+      lines.forEach((t, k) => label(t, W / 2, H * 0.4 + k * 28 * dpr, 18, "#fff", 700));
+    }
+  },
+};
+
 // ---------- rendering ----------
 
 function drawHand(h, alpha) {
@@ -949,6 +1532,7 @@ function render(now) {
 
 function detect() {
   if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
+  if (!document.getElementById("studio").hidden) return;
   lastVideoTime = video.currentTime;
   const now = performance.now();
   const result = landmarker.detectForVideo(video, now);
