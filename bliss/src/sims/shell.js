@@ -30,6 +30,7 @@ export default function simPage({ controls, status, script }) {
   .seg button { height: 32px; background: transparent; padding: 0 10px; }
   .seg button.on, button.toggle.on { background: var(--chip-on); }
   .grow { flex: 1; }
+  .break { flex-basis: 100%; height: 0; }
   #status { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); width: max-content;
     max-width: calc(100% - 32px); text-align: center; font-size: 13px; color: var(--fg);
     background: rgba(10, 15, 14, 0.6); padding: 4px 12px; border-radius: 999px;

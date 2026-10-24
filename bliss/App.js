@@ -12,7 +12,7 @@ import fireworksHtml from './src/sims/fireworks';
 import planetsHtml from './src/sims/planets';
 
 const MODES = [
-  { key: 'cloth', title: 'Cloth', body: 'Pull, stretch and rip it.', html: clothHtml },
+  { key: 'cloth', title: 'Denim', body: 'Pull, cut, burn and pin it.', html: clothHtml },
   { key: 'water', title: 'Water', body: 'Pour, stir, tilt to slosh.', html: waterHtml },
   { key: 'sand', title: 'Sand', body: 'Pour grains, build walls.', html: sandHtml },
   { key: 'jelly', title: 'Jelly', body: 'Squish, stretch and throw.', html: jellyHtml },
