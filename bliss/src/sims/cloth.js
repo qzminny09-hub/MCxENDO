@@ -1,11 +1,13 @@
 import simPage from './shell';
 
 // A heavy denim curtain on a rail, simulated with Verlet integration on a grid of points joined by
-// threads, plus skip-one links that stop it stretching while still letting it gather into folds.
+// threads, plus skip-one links that stop it stretching and gently resist sharp creases, so it gathers
+// into broad, heavy folds.
 // Threads vary in strength so tears wander like real fabric.
-// The fabric is drawn with WebGL on a mesh refined from the physics grid: every cell is split 4x4,
+// The fabric is drawn with WebGL on a mesh refined from the physics grid: every cell is split 6x6,
 // with new points on Catmull-Rom curves through their neighbours, and shaded as indigo twill with
-// topstitched seams, a pocket and a leather patch. A drop shadow sells the thickness.
+// topstitched seams, a pocket and a leather patch. A solid slab drawn just below the cloth shows
+// its thickness along every edge, over a soft drop shadow.
 // The rail, pins, edges, frayed threads, flames and finger feedback go on a 2D canvas above it.
 // Tools: Pull (grab), Cut (slice), Burn (fire that spreads), Pin (tack it anywhere), Blow (gust).
 // Keep backticks and dollar-brace sequences out of the script string.
@@ -28,22 +30,23 @@ const script = `
 
   var SPACING = 3.5;
   var MAX_POINTS = 40000;
-  var SUB = 4;
-  var GRAVITY = 0.24;
-  var DAMPING = 0.985;
+  var SUB = 6;
+  var GRAVITY = 0.26;
+  var DAMPING = 0.983;
   // Several small sub-steps per frame keep a dense cloth far stiffer than extra solver passes would.
   var SUBSTEPS = 4;
   var ITERATIONS = 8;
-  var BRACE = 0.5;
+  var BRACE = 0.65;
+  var BRACE_PUSH = 0.03;
   var SUB_GRAVITY = GRAVITY / (SUBSTEPS * SUBSTEPS);
   var SUB_DAMPING = Math.pow(DAMPING, 1 / SUBSTEPS);
   var GRIP_FOLLOW = 1 - Math.pow(0.45, 1 / SUBSTEPS);
   // The grip drags the cloth at most this far per sub-step, so how easily it tears depends on how
   // hard you pull rather than on how many frames the phone manages between finger movements.
   var GRIP_MAX_MOVE = 1;
-  var TEAR_RATIO = 4.2;
-  var GRIP_TEAR_RATIO = 3.9;
-  var HEM_TEAR_RATIO = 6.5;
+  var TEAR_RATIO = 4.9;
+  var GRIP_TEAR_RATIO = 4.5;
+  var HEM_TEAR_RATIO = 7.5;
   var STRENGTH_SPREAD = 0.36;
   var GRIP_RADIUS = 18;
   var FRAY = 2.6;
@@ -59,7 +62,7 @@ const script = `
   var FC, FR, FN, fx, fy, fh;
   var px, py, ox, oy, pinned, held, heat;
   var ca, cb, alive, strength, quadOn;
-  var posData, uvData, shadeData, charData, ratio, indexData, indexCount, wireData, wireCount, meshDirty;
+  var posData, uvData, shadeData, charData, ratio, indexData, indexCount, wireData, wireCount, meshDirty, charDirty;
   var embers = [];
   var torn = 0, burnt = 0;
   var tool = 'pull';
@@ -91,10 +94,11 @@ const script = `
     'vec2 seg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);' +
     '  return vec2(length(pa - ba * h), h * length(ba)); }' +
     'void main() {' +
-    '  if (uShadow > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, 0.3); return; }' +
+    '  if (uShadow > 1.5) { gl_FragColor = vec4(vec3(0.025, 0.04, 0.1) * (0.7 + 0.5 * clamp(vShade, 0.0, 1.0)), 1.0); return; }' +
+    '  if (uShadow > 0.5) { gl_FragColor = vec4(0.0, 0.0, 0.0, 0.34); return; }' +
     '  vec2 uv = vUV;' +
-    '  float rib = 0.5 + 0.5 * sin((uv.x + uv.y * 0.62) * 4.4);' +
-    '  float weft = step(0.84, hash(floor(uv * 1.7)));' +
+    '  float rib = 0.5 + 0.5 * sin((uv.x + uv.y * 0.62) * 3.3);' +
+    '  float weft = step(0.84, hash(floor(uv * 1.25)));' +
     '  float wash = 0.5 + 0.5 * sin(uv.x * 0.029 + sin(uv.y * 0.021) * 2.2) * sin(uv.y * 0.025 + 1.3);' +
     '  vec3 indigo = mix(vec3(0.06, 0.11, 0.27), vec3(0.2, 0.31, 0.53), wash * 0.8);' +
     '  vec3 col = indigo * (0.8 + 0.3 * rib) + vec3(0.32, 0.34, 0.38) * weft * 0.3;' +
@@ -124,7 +128,7 @@ const script = `
     '  col = mix(col, vec3(0.88, 0.6, 0.24), clamp(s, 0.0, 1.0));' +
     '  float rv = min(length(uv - a - vec2(3.5, 3.5)), length(uv - b - vec2(-3.5, 3.5)));' +
     '  if (rv < 2.4) col = mix(vec3(0.98, 0.8, 0.55), vec3(0.6, 0.36, 0.17), smoothstep(0.0, 2.4, rv));' +
-    '  float light = 0.34 + 0.8 * clamp(vShade, 0.0, 1.0);' +
+    '  float light = 0.27 + 0.92 * clamp(vShade, 0.0, 1.0);' +
     '  if (vShade < 0.0) { col = vec3(0.5, 0.57, 0.7) * (0.8 + 0.2 * rib); light = 0.55; }' +
     '  col *= light;' +
     '  float ch = clamp(vChar, 0.0, 1.0);' +
@@ -248,6 +252,7 @@ const script = `
     gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
     gl.bufferData(gl.ARRAY_BUFFER, uvData, gl.STATIC_DRAW);
     meshDirty = true;
+    charDirty = true;
 
     torn = 0;
     burnt = 0;
@@ -348,10 +353,10 @@ const script = `
     if (broke) tore(broke);
   }
 
-  // Denim barely stretches: points two apart along a row or column are kept from drifting further
-  // than twice the spacing, as long as both threads between them are intact. The links only pull,
-  // never push, because in this flat view a fold looks like the cloth squashing together, and
-  // resisting that would stop the fabric gathering when it is pulled.
+  // Denim barely stretches: points two apart along a row or column are pulled back towards twice the
+  // spacing, as long as both threads between them are intact. They push back only lightly, because in
+  // this flat view a fold looks like the cloth squashing together: a light push rounds the folds out
+  // like thick fabric, while a strong one would stop the cloth gathering and make it tear instead.
   function brace() {
     var rest = REST * 2;
     for (var j = 0; j < ROWS; j++) {
@@ -370,8 +375,8 @@ const script = `
   function link(a, b, rest) {
     var dx = px[b] - px[a], dy = py[b] - py[a];
     var d = Math.sqrt(dx * dx + dy * dy);
-    if (d <= rest) return;
-    var diff = ((d - rest) / d) * BRACE;
+    if (d === 0) return;
+    var diff = ((d - rest) / d) * (d > rest ? BRACE : BRACE_PUSH);
     var fa = pinned[a] || held[a], fb = pinned[b] || held[b];
     if (fa && fb) return;
     if (fa) { px[b] -= dx * diff; py[b] -= dy * diff; }
@@ -425,6 +430,7 @@ const script = `
       }
       heat[k] = hk;
     }
+    if (any) charDirty = true;
     if (broke) { meshDirty = true; updateStatus(); }
     for (var e = embers.length - 1; e >= 0; e--) {
       var em = embers[e];
@@ -565,7 +571,7 @@ const script = `
       if (rt <= 0) { shadeData[k] = -1; continue; }
       i = k % FC;
       var side = (i < FC - 1 ? ratio[k + 1] : rt) - (i > 0 ? ratio[k - 1] : rt);
-      var sh = (rt - 0.3) / 0.95 + side * 0.9;
+      var sh = (rt - 0.3) / 0.95 + side * 1.2;
       shadeData[k] = sh < 0 ? 0 : sh > 1 ? 1 : sh;
     }
   }
@@ -589,11 +595,16 @@ const script = `
     bindAttr(fabricPos, posBuf, posData, 2);
     bindAttr(fabricUV, uvBuf, null, 2);
     bindAttr(fabricShade, shadeBuf, shadeData, 1);
-    bindAttr(fabricChar, charBuf, charData, 1);
+    // The burn colouring only changes while something is burning, so skip re-sending it otherwise.
+    bindAttr(fabricChar, charBuf, charDirty ? charData : null, 1);
+    charDirty = false;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuf);
-    // Drop shadow first, offset down and right, then the cloth itself.
-    gl.uniform2f(fabricOffset, 4, 7);
+    // Soft drop shadow first, then the dark slab of the cloth's thickness just below it, then the cloth.
+    gl.uniform2f(fabricOffset, 6, 10);
     gl.uniform1f(fabricShadow, 1);
+    gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
+    gl.uniform2f(fabricOffset, 0.8, 3.4);
+    gl.uniform1f(fabricShadow, 2);
     gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
     gl.uniform2f(fabricOffset, 0, 0);
     gl.uniform1f(fabricShadow, 0);
@@ -655,7 +666,7 @@ const script = `
     }
     ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(14, 22, 44, 0.95)';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.6;
     ctx.stroke(edges);
     ctx.strokeStyle = 'rgba(236, 232, 220, 0.75)';
     ctx.lineWidth = 0.8;
