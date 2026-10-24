@@ -2,14 +2,20 @@ import simPage from './shell';
 
 // Curtain on a rail, simulated with Verlet integration on a grid of points joined by threads.
 // Threads vary slightly in strength so tears wander like real fabric instead of running straight.
-// The fabric is drawn with WebGL (smooth shading and a woven texture that moves with the cloth);
-// the rail, pins, loose threads and finger feedback go on a 2D canvas layered above it.
+// The fabric is drawn with WebGL on a mesh refined from the physics grid: every cell is split into
+// four, with new points placed on smooth curves through their neighbours, for four times the faces.
+// The rail, pins, loose threads and finger feedback go on a 2D canvas layered above it.
 // Keep backticks and dollar-brace sequences out of the script string.
 const script = `
 (function () {
   var canvas = document.getElementById('c');
   var statusEl = document.getElementById('status');
-  var gl = canvas.getContext('webgl', { antialias: true, alpha: true });
+  // The refined mesh has more than 65,536 points, so it needs 32-bit indices (WebGL 2, or the WebGL 1 extension).
+  var gl = canvas.getContext('webgl2', { antialias: true, alpha: true });
+  if (!gl) {
+    gl = canvas.getContext('webgl', { antialias: true, alpha: true });
+    if (gl && !gl.getExtension('OES_element_index_uint')) gl = null;
+  }
   if (!gl) { statusEl.textContent = 'This phone cannot draw the cloth (WebGL is unavailable).'; return; }
   document.body.style.background = 'radial-gradient(ellipse at 50% 40%, #16211e, #0a0f0e 80%)';
   var overlay = document.createElement('canvas');
@@ -17,7 +23,8 @@ const script = `
   document.body.appendChild(overlay);
   var ctx = overlay.getContext('2d');
 
-  var SPACING = 4;
+  var SPACING = 3;
+  var MAX_POINTS = 40000;
   var GRAVITY = 0.2;
   var DAMPING = 0.992;
   // Several small sub-steps per frame keep a dense cloth far stiffer than extra solver passes would.
@@ -31,17 +38,19 @@ const script = `
   var HEM_TEAR_RATIO = 5;
   var STRENGTH_SPREAD = 0.36;
   var GRIP_RADIUS = 18;
-  var FRAY = 2.5;
+  var FRAY = 1.6;
   var STEP_MS = 1000 / 60;
 
   var W, H, DPR, TOP, LEFT, CLOTH_W;
   var COLS, ROWS, N, REST, HC, CC, HEM_END;
+  var FC, FR, FN, fx, fy;
   var px, py, ox, oy, pinned, held;
   var ca, cb, alive, strength, quadOn;
-  var posData, uvData, shadeData, ratio, indexData, indexCount, frayData, meshDirty;
+  var posData, uvData, shadeData, ratio, indexData, indexCount, wireData, wireCount, frayData, meshDirty;
   var torn = 0;
   var mode = 'pull';
   var wind = false;
+  var showMesh = false;
   var pointers = {};
   var trails = [];
 
@@ -86,7 +95,7 @@ const script = `
   var lineRes = gl.getUniformLocation(lines, 'uRes');
   var lineColor = gl.getUniformLocation(lines, 'uColor');
   var posBuf = gl.createBuffer(), uvBuf = gl.createBuffer(), shadeBuf = gl.createBuffer();
-  var indexBuf = gl.createBuffer(), frayBuf = gl.createBuffer();
+  var indexBuf = gl.createBuffer(), wireBuf = gl.createBuffer(), frayBuf = gl.createBuffer();
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -104,9 +113,11 @@ const script = `
 
     TOP = document.getElementById('bar').getBoundingClientRect().bottom + 30;
     CLOTH_W = Math.min(W - 40, 560);
-    COLS = Math.max(40, Math.min(140, Math.round(CLOTH_W / SPACING) + 1));
-    REST = CLOTH_W / (COLS - 1);
     var clothH = Math.min(H - TOP - 80, CLOTH_W * 1.2);
+    // Big screens get a slightly wider spacing so the physics stays quick enough to feel real.
+    var spacing = Math.max(SPACING, Math.sqrt((CLOTH_W * clothH) / MAX_POINTS) * 1.03);
+    COLS = Math.max(40, Math.round(CLOTH_W / spacing) + 1);
+    REST = CLOTH_W / (COLS - 1);
     ROWS = Math.max(36, Math.round(clothH / REST) + 1);
     LEFT = (W - CLOTH_W) / 2;
     N = COLS * ROWS;
@@ -137,13 +148,18 @@ const script = `
     for (c = 0; c < CC; c++) strength[c] = 1 - STRENGTH_SPREAD / 2 + Math.random() * STRENGTH_SPREAD;
     quadOn = new Uint8Array((COLS - 1) * (ROWS - 1));
 
-    posData = new Float32Array(N * 2);
-    uvData = new Float32Array(N * 2);
-    shadeData = new Float32Array(N);
-    ratio = new Float32Array(N);
-    indexData = new Uint16Array((COLS - 1) * (ROWS - 1) * 6);
+    FC = COLS * 2 - 1;
+    FR = ROWS * 2 - 1;
+    FN = FC * FR;
+    fx = new Float32Array(FN); fy = new Float32Array(FN);
+    posData = new Float32Array(FN * 2);
+    uvData = new Float32Array(FN * 2);
+    shadeData = new Float32Array(FN);
+    ratio = new Float32Array(FN);
+    indexData = new Uint32Array((COLS - 1) * (ROWS - 1) * 24);
+    wireData = new Uint32Array((COLS - 1) * (ROWS - 1) * 24);
     frayData = new Float32Array(CC * 8);
-    for (k = 0; k < N; k++) { uvData[k * 2] = (k % COLS) * REST; uvData[k * 2 + 1] = ((k / COLS) | 0) * REST; }
+    for (k = 0; k < FN; k++) { uvData[k * 2] = (k % FC) * REST / 2; uvData[k * 2 + 1] = ((k / FC) | 0) * REST / 2; }
     gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
     gl.bufferData(gl.ARRAY_BUFFER, uvData, gl.STATIC_DRAW);
     meshDirty = true;
@@ -245,43 +261,102 @@ const script = `
     return best;
   }
 
-  // Rebuild the triangle list from the cells whose four threads are all intact.
+  // Rebuild the triangle list (and wireframe) from the cells whose four threads are all intact.
+  // Each intact cell becomes four faces of the refined mesh.
   function rebuildMesh() {
-    var QC = COLS - 1, n = 0;
+    var QC = COLS - 1, n = 0, w = 0;
     for (var j = 0; j < ROWS - 1; j++) {
       for (var i = 0; i < QC; i++) {
         var on = alive[j * QC + i] && alive[(j + 1) * QC + i] && alive[HC + j * COLS + i] && alive[HC + j * COLS + i + 1];
         quadOn[j * QC + i] = on;
         if (!on) continue;
-        var p0 = j * COLS + i, p1 = p0 + 1, p2 = p0 + COLS + 1, p3 = p0 + COLS;
-        indexData[n++] = p0; indexData[n++] = p1; indexData[n++] = p2;
-        indexData[n++] = p0; indexData[n++] = p2; indexData[n++] = p3;
+        for (var t = 0; t < 2; t++) {
+          for (var u = 0; u < 2; u++) {
+            var q0 = (j * 2 + t) * FC + i * 2 + u, q1 = q0 + 1, q2 = q0 + FC + 1, q3 = q0 + FC;
+            indexData[n++] = q0; indexData[n++] = q1; indexData[n++] = q2;
+            indexData[n++] = q0; indexData[n++] = q2; indexData[n++] = q3;
+            wireData[w++] = q0; wireData[w++] = q1; wireData[w++] = q0; wireData[w++] = q3;
+          }
+        }
+        // Close the cell's right and bottom sides.
+        var r0 = j * 2 * FC + i * 2 + 2, b0 = (j * 2 + 2) * FC + i * 2;
+        wireData[w++] = r0; wireData[w++] = r0 + FC; wireData[w++] = r0 + FC; wireData[w++] = r0 + FC * 2;
+        wireData[w++] = b0; wireData[w++] = b0 + 1; wireData[w++] = b0 + 1; wireData[w++] = b0 + 2;
       }
     }
     indexCount = n;
+    wireCount = w;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuf);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData.subarray(0, n), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireBuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wireData.subarray(0, w), gl.DYNAMIC_DRAW);
     meshDirty = false;
+  }
+
+  // Fill the refined grid: physics points at even positions, midpoints on the four-point curve
+  // (-a + 9b + 9c - d) / 16 through their neighbours (plain midpoints next to a tear, so torn
+  // edges do not bulge), and cell centres from those.
+  function refine() {
+    var QC = COLS - 1, i, j, k, f, h, v;
+    for (j = 0; j < ROWS; j++) {
+      for (i = 0; i < COLS; i++) {
+        k = j * COLS + i; f = j * 2 * FC + i * 2;
+        fx[f] = px[k]; fy[f] = py[k];
+      }
+    }
+    for (j = 0; j < ROWS; j++) {
+      for (i = 0; i < QC; i++) {
+        k = j * COLS + i; h = j * QC + i; f = j * 2 * FC + i * 2 + 1;
+        if (i > 0 && i < QC - 1 && alive[h - 1] && alive[h] && alive[h + 1]) {
+          fx[f] = (9 * (px[k] + px[k + 1]) - px[k - 1] - px[k + 2]) / 16;
+          fy[f] = (9 * (py[k] + py[k + 1]) - py[k - 1] - py[k + 2]) / 16;
+        } else {
+          fx[f] = (px[k] + px[k + 1]) / 2;
+          fy[f] = (py[k] + py[k + 1]) / 2;
+        }
+      }
+    }
+    for (j = 0; j < ROWS - 1; j++) {
+      for (i = 0; i < COLS; i++) {
+        k = j * COLS + i; v = HC + j * COLS + i; f = (j * 2 + 1) * FC + i * 2;
+        if (j > 0 && j < ROWS - 2 && alive[v - COLS] && alive[v] && alive[v + COLS]) {
+          fx[f] = (9 * (px[k] + px[k + COLS]) - px[k - COLS] - px[k + COLS * 2]) / 16;
+          fy[f] = (9 * (py[k] + py[k + COLS]) - py[k - COLS] - py[k + COLS * 2]) / 16;
+        } else {
+          fx[f] = (px[k] + px[k + COLS]) / 2;
+          fy[f] = (py[k] + py[k + COLS]) / 2;
+        }
+      }
+    }
+    for (j = 0; j < ROWS - 1; j++) {
+      for (i = 0; i < QC; i++) {
+        f = (j * 2 + 1) * FC + i * 2 + 1;
+        fx[f] = (fx[f - FC] + fx[f + FC] + fx[f - 1] + fx[f + 1]) / 4;
+        fy[f] = (fy[f - FC] + fy[f + FC] + fy[f - 1] + fy[f + 1]) / 4;
+      }
+    }
   }
 
   // Light each point from how much the cloth around it is stretched or bunched up, plus a sideways
   // term from how that changes across the fold, so folds get a lit side and a shadowed side.
   function computeShading() {
-    for (var k = 0; k < N; k++) {
-      var i = k % COLS, j = (k / COLS) | 0;
-      var l = i > 0 ? k - 1 : k, r = i < COLS - 1 ? k + 1 : k;
-      var u = j > 0 ? k - COLS : k, d = j < ROWS - 1 ? k + COLS : k;
-      var ax = px[r] - px[l], ay = py[r] - py[l], bx = px[d] - px[u], by = py[d] - py[u];
-      ratio[k] = (ax * by - ay * bx) / ((r - l) * ((d - u) / COLS) * REST * REST);
-      posData[k * 2] = px[k];
-      posData[k * 2 + 1] = py[k];
+    refine();
+    var half = REST / 2;
+    for (var k = 0; k < FN; k++) {
+      var i = k % FC, j = (k / FC) | 0;
+      var l = i > 0 ? k - 1 : k, r = i < FC - 1 ? k + 1 : k;
+      var u = j > 0 ? k - FC : k, d = j < FR - 1 ? k + FC : k;
+      var ax = fx[r] - fx[l], ay = fy[r] - fy[l], bx = fx[d] - fx[u], by = fy[d] - fy[u];
+      ratio[k] = (ax * by - ay * bx) / ((r - l) * ((d - u) / FC) * half * half);
+      posData[k * 2] = fx[k];
+      posData[k * 2 + 1] = fy[k];
     }
-    for (k = 0; k < N; k++) {
+    for (k = 0; k < FN; k++) {
       var rt = ratio[k];
       if (rt <= 0) { shadeData[k] = -1; continue; }
-      i = k % COLS;
-      var side = (i < COLS - 1 ? ratio[k + 1] : rt) - (i > 0 ? ratio[k - 1] : rt);
-      var sh = (rt - 0.3) / 0.95 + side * 0.45;
+      i = k % FC;
+      var side = (i < FC - 1 ? ratio[k + 1] : rt) - (i > 0 ? ratio[k - 1] : rt);
+      var sh = (rt - 0.3) / 0.95 + side * 0.6;
       shadeData[k] = sh < 0 ? 0 : sh > 1 ? 1 : sh;
     }
   }
@@ -306,9 +381,20 @@ const script = `
     gl.enableVertexAttribArray(fabricShade);
     gl.vertexAttribPointer(fabricShade, 1, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuf);
-    gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
     gl.disableVertexAttribArray(fabricUV);
     gl.disableVertexAttribArray(fabricShade);
+
+    if (showMesh) {
+      gl.useProgram(lines);
+      gl.uniform2f(lineRes, W, H);
+      gl.uniform4f(lineColor, 0.02 * 0.45, 0.06 * 0.45, 0.05 * 0.45, 0.45);
+      gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+      gl.enableVertexAttribArray(linePos);
+      gl.vertexAttribPointer(linePos, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireBuf);
+      gl.drawElements(gl.LINES, wireCount, gl.UNSIGNED_INT, 0);
+    }
 
     // Short frayed fibres where threads snapped.
     var n = 0;
@@ -446,6 +532,7 @@ const script = `
 
   segment(['mPull', 'mRip'], function (id) { mode = id === 'mPull' ? 'pull' : 'rip'; });
   toggle('wind', function (on) { wind = on; });
+  toggle('mesh', function (on) { showMesh = on; });
   document.getElementById('reset').onclick = build;
 
   var resizeTimer;
@@ -477,6 +564,7 @@ export default simPage({
   </div>
   <div class="grow"></div>
   <button id="wind">Wind</button>
+  <button id="mesh">Mesh</button>
   <button id="reset">Reset</button>`,
   status: 'Drag the cloth. Pull hard and it tears.',
   script,

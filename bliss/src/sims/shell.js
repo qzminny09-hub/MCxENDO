@@ -20,14 +20,14 @@ export default function simPage({ controls, status, script }) {
     font-family: system-ui, -apple-system, Roboto, sans-serif; -webkit-user-select: none; user-select: none;
     -webkit-tap-highlight-color: transparent; }
   canvas { position: fixed; inset: 0; touch-action: none; display: block; }
-  #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px;
-    padding: 10px 12px; z-index: 2; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; align-items: center;
+    gap: 6px; padding: 10px 12px; z-index: 2; }
   button { font: inherit; color: var(--fg); background: var(--chip); border: 0; border-radius: 999px;
-    height: 38px; padding: 0 13px; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+    height: 38px; padding: 0 11px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
   button:focus-visible { outline: 2px solid var(--chip-on); outline-offset: 2px; }
   #back { width: 38px; padding: 0; font-size: 20px; line-height: 38px; flex: none; }
   .seg { display: flex; background: var(--chip); border-radius: 999px; padding: 3px; gap: 2px; }
-  .seg button { height: 32px; background: transparent; padding: 0 12px; }
+  .seg button { height: 32px; background: transparent; padding: 0 10px; }
   .seg button.on, button.toggle.on { background: var(--chip-on); }
   .grow { flex: 1; }
   #status { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); width: max-content;
