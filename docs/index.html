@@ -23,7 +23,7 @@
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg);
     font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
   #stage { position: fixed; inset: 0; }
-  video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #stage video, #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   video { object-fit: cover; }
   video.mirror { transform: scaleX(-1); }
   .bar { position: fixed; left: 0; right: 0; display: flex; gap: 8px; align-items: center;
@@ -55,29 +55,6 @@
   #extra { display: flex; gap: 6px; }
   #extra button.live { background: #ff4d6d; color: #fff; }
 
-  /* Animation studio */
-  #studio { position: fixed; inset: 0; z-index: 4; background: var(--bg); overflow-y: auto;
-    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-  #studio .wrap { max-width: 560px; margin: 0 auto; display: grid; gap: 12px; }
-  #studio header { display: flex; justify-content: space-between; align-items: center; }
-  #studio h2 { margin: 0; font-size: 20px; }
-  #studio .row { flex-wrap: wrap; }
-  #studio label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
-  #studio select, #studio input[type=text] { font: inherit; color: var(--fg); background: rgba(255,255,255,.08);
-    border: 1px solid rgba(255,255,255,.15); border-radius: 10px; padding: 8px 10px; min-width: 0; }
-  #studio input[type=text] { flex: 1; }
-  #studio .primary { background: var(--accent); color: var(--bg); }
-  #studio .danger { color: #ffb4a2; }
-  #board { width: 100%; aspect-ratio: 1; max-height: 58vh; max-width: 58vh; justify-self: center; border-radius: 14px;
-    background: #1a2129; touch-action: none; display: block; }
-  .swatch { width: 34px; height: 34px; padding: 0; border-radius: 50%; border: 3px solid transparent; }
-  .swatch.on { border-color: var(--fg); }
-  .tool.on { background: var(--fg); color: var(--bg); }
-  #frames { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-  #frames canvas { width: 64px; height: 64px; border-radius: 8px; background: #1a2129; flex: none; border: 3px solid transparent; cursor: pointer; }
-  #frames canvas.on { border-color: var(--accent); }
-  #frames button { width: 64px; height: 64px; flex: none; font-size: 26px; }
-  .note { color: var(--muted); font-size: 13px; margin: 0; }
 </style>
 </head>
 <body>
@@ -105,49 +82,7 @@
   </div>
 </div>
 
-<div id="studio" hidden>
-  <div class="wrap">
-    <header>
-      <h2>Animation Studio</h2>
-      <button class="primary" id="studioDone" type="button">Done</button>
-    </header>
-    <div class="row">
-      <select id="animSel" aria-label="Animation"></select>
-      <button id="animNew" type="button">+ New</button>
-      <button id="animDel" class="danger" type="button">Delete</button>
-    </div>
-    <div class="row">
-      <input id="animName" type="text" aria-label="Animation name" placeholder="Name">
-      <label>Plays on <select id="animGesture"></select></label>
-    </div>
-    <canvas id="board"></canvas>
-    <div class="row" id="swatches"></div>
-    <div class="row">
-      <button class="tool on" data-size="0.015" type="button">Thin</button>
-      <button class="tool" data-size="0.035" type="button">Medium</button>
-      <button class="tool" data-size="0.07" type="button">Thick</button>
-      <button id="eraser" type="button">Eraser</button>
-      <button id="undo" type="button">Undo</button>
-      <button id="clearFrame" class="danger" type="button">Clear</button>
-    </div>
-    <div id="frames"></div>
-    <div class="row">
-      <label>Keyframe shows for <select id="frameDur">
-        <option value="80">0.08 s</option><option value="150">0.15 s</option><option value="250">0.25 s</option>
-        <option value="400">0.4 s</option><option value="700">0.7 s</option><option value="1000">1 s</option><option value="2000">2 s</option>
-      </select></label>
-      <button id="frameDel" class="danger" type="button">Delete frame</button>
-    </div>
-    <div class="row">
-      <label><input id="smooth" type="checkbox"> Smooth (blend between keyframes)</label>
-      <label><input id="onion" type="checkbox" checked> Show previous frame</label>
-    </div>
-    <div class="row">
-      <button id="play" class="primary" type="button">▶ Play</button>
-    </div>
-    <p class="note">Draw with your finger. + copies the current frame so you can change it a little for the next one. Then pick a hand signal and use the My Animations mode: it plays on your hand when you make that signal.</p>
-  </div>
-</div>
+<div id="studio" hidden></div>
 
 <div id="start">
   <div class="box">
@@ -160,6 +95,7 @@
 
 <script type="module">
 import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+import { initStudio, openStudio, drawAnim, duration, getAnims, spellWords, signalTarget } from "./studio.js";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
@@ -176,7 +112,7 @@ const MODES = [
   { id: "draw", name: "Air Draw", help: "☝️ draw · ✌️ new color · ✊ lift pen · hold 🖐 to clear" },
   { id: "pop", name: "Bubble Pop", help: "Pop the bubbles with your fingertips" },
   { id: "music", name: "Finger Piano", help: "Pinch your thumb to each finger to play a note" },
-  { id: "magic", name: "Magic", help: "Say a spell: fireball · lightning · freeze · lumos · nox · leviosa · expelliarmus · rainbow · heal · storm · abracadabra" },
+  { id: "magic", name: "Magic", help: "Say a spell (fireball, lightning, protego, meteor, portal…) or make a signal you linked · ✏️ Studio → Spell book to set them up" },
   { id: "anim", name: "My Animations", help: "Make a hand signal to play the animation linked to it · ✏️ to draw your own" },
   { id: "slice", name: "Fruit Slice", help: "Swipe your finger fast to slice fruit · avoid the 💣" },
   { id: "force", name: "Force Push", help: "🖐 pushes the orbs away · ✊ pulls them in" },
@@ -348,7 +284,7 @@ function onGesture(h, g, st) {
     ring(h.pts[8].x, h.pts[8].y, PEN_COLORS[penColor], 60);
   }
   MODE_HOOKS[m]?.gesture?.(h, g, performance.now());
-  if (m === "magic" && g === "fist") {
+  if (m === "magic" && g === "fist" && !signalTarget("fist")) {
     ring(c.x, c.y, COLORS[h.label], 260);
     burst(c.x, c.y, { count: 90, colors: CONFETTI, speed: 14, gravity: 0.02, size: 5, life: 70 });
     tone(130, { type: "square", slide: 3, dur: 0.35, vol: 0.12 });
@@ -865,16 +801,26 @@ const MODE_HOOKS = {
   },
 };
 
-// ---------- voice spells (Magic mode) ----------
+// ---------- spells (Magic mode) ----------
 
 let mic = { on: false, status: "", heard: "", heardAt: 0, cast: new Set() };
-let fx = { lumos: 0, dark: 0, frost: 0, rainbow: 0, rain: 0 };
-let fireballs = [], bolts = [], flash = 0;
+const FX0 = () => ({ lumos: 0, dark: 0, frost: 0, rainbow: 0, rain: 0, shield: 0, meteor: 0, tornado: 0, portal: null, wind: 0, shake: 0 });
+let fx = FX0();
+let fireballs = [], bolts = [], meteors = [], liveAnims = [], flash = 0, nextMeteor = 0;
 let webRecognizer = null;
 
 function castOrigin() {
   const h = hands[0];
   return h ? { x: h.pts[9].x, y: h.pts[9].y, h } : { x: canvas.width / 2, y: canvas.height * 0.75, h: null };
+}
+
+// Pointing aims along the finger; otherwise spells fly toward the top middle of the screen
+function aimFrom(o) {
+  let dir = { x: canvas.width / 2 - o.x, y: canvas.height * 0.2 - o.y };
+  if (o.h && o.h.gesture === "point") dir = { x: o.h.pts[8].x - o.h.pts[5].x, y: o.h.pts[8].y - o.h.pts[5].y };
+  if (Math.hypot(dir.x, dir.y) < 20 * dpr) dir = { x: 0, y: -1 };
+  const len = Math.hypot(dir.x, dir.y);
+  return { x: dir.x / len, y: dir.y / len };
 }
 
 function lightningBolt(to) {
@@ -890,56 +836,73 @@ function lightningBolt(to) {
   buzz(80);
 }
 
+function explode(x, y, big = 1) {
+  ring(x, y, "#fb5607", 300 * big);
+  burst(x, y, { count: Math.round(70 * big), colors: ["#ffbe0b", "#fb5607", "#ff006e", "#fff"], speed: 14 * big, size: 6 });
+  noise({ dur: 0.7, vol: 0.6, filter: "lowpass", freq: 500 }); buzz(120);
+}
+
+const SOUND_FX = {
+  whoosh: () => noise({ dur: 0.6, vol: 0.35, filter: "bandpass", freq: 700, q: 0.6 }),
+  boom: () => { noise({ dur: 0.9, vol: 0.6, filter: "lowpass", freq: 400 }); tone(70, { type: "sine", slide: 0.5, dur: 0.6, vol: 0.5 }); },
+  chime: () => { tone(1047, { type: "sine", dur: 0.8, vol: 0.2 }); setTimeout(() => tone(1568, { type: "sine", dur: 1, vol: 0.15 }), 90); },
+  zap: () => tone(1400, { type: "sawtooth", slide: 0.15, dur: 0.25, vol: 0.12 }),
+  magic: () => [784, 988, 1175, 1568].forEach((f, k) => setTimeout(() => tone(f, { type: "sine", dur: 0.4, vol: 0.15 }), k * 70)),
+  pop: () => tone(600, { type: "sine", slide: 0.3, dur: 0.12, vol: 0.25 }),
+};
+function playSound(name) { SOUND_FX[name]?.(); }
+
 const SPELLS = [
-  { name: "Fireball", words: ["fireball", "fire ball", "fire", "incendio", "inferno"], color: "#fb5607", cast(o) {
-    const h = o.h;
-    let dir = { x: canvas.width / 2 - o.x, y: canvas.height * 0.2 - o.y };
-    if (h && h.gesture === "point") dir = { x: h.pts[8].x - h.pts[5].x, y: h.pts[8].y - h.pts[5].y };
-    const len = Math.hypot(dir.x, dir.y) || 1;
-    fireballs.push({ x: o.x, y: o.y, vx: dir.x / len * 900 * dpr, vy: dir.y / len * 900 * dpr, t: 0 });
+  { name: "Fireball", words: ["fireball", "fire ball", "fire", "incendio", "inferno"], color: "#fb5607",
+    desc: "Shoots a fireball that explodes. Point ☝️ to aim it.", cast(o) {
+    const d = aimFrom(o);
+    fireballs.push({ x: o.x, y: o.y, vx: d.x * 900 * dpr, vy: d.y * 900 * dpr, t: 0 });
     noise({ dur: 0.8, vol: 0.4, filter: "bandpass", freq: 500, q: 0.5 });
   } },
-  { name: "Lightning", words: ["lightning", "thunder", "zap", "fulgur"], color: "#bde0fe", cast(o) {
+  { name: "Lightning", words: ["lightning", "thunder", "zap", "fulgur"], color: "#bde0fe",
+    desc: "Three lightning strikes hit your hand.", cast(o) {
     lightningBolt(o);
     setTimeout(() => lightningBolt(castOrigin()), 250);
     setTimeout(() => lightningBolt(castOrigin()), 550);
   } },
-  { name: "Freeze", words: ["freeze", "frozen", "ice", "frost", "glacius"], color: "#a2d2ff", cast(o) {
+  { name: "Freeze", words: ["freeze", "frozen", "ice", "frost", "glacius"], color: "#a2d2ff",
+    desc: "Frosts the screen over and makes it snow.", cast() {
     fx.frost = performance.now() + 6000;
     for (let k = 0; k < 40; k++) float(rand(0, canvas.width), rand(-300, 0) * dpr, { emoji: ["❄️"], size: 22, vy: 2, spread: 1, life: 200 });
     tone(1600, { type: "sine", dur: 1.2, vol: 0.12 }); tone(2100, { type: "sine", dur: 1.4, vol: 0.08 });
   } },
-  { name: "Lumos", words: ["lumos", "light"], color: "#fff3b0", cast() {
+  { name: "Lumos", words: ["lumos", "light"], color: "#fff3b0", desc: "Your fingertips glow with light.", cast() {
     fx.lumos = performance.now() + 10000; fx.dark = 0;
     tone(880, { type: "sine", dur: 0.8, vol: 0.15 }); tone(1320, { type: "sine", dur: 1, vol: 0.1 });
   } },
-  { name: "Nox", words: ["nox", "darkness", "dark"], color: "#8a97a6", cast() {
+  { name: "Nox", words: ["nox", "darkness", "dark"], color: "#8a97a6", desc: "Plunges the screen into darkness.", cast() {
     fx.dark = performance.now() + 8000; fx.lumos = 0;
     tone(160, { type: "sine", slide: 0.5, dur: 1, vol: 0.25 });
   } },
-  { name: "Leviosa", words: ["leviosa", "wingardium leviosa", "levitate", "float"], color: "#cdb4db", cast() {
+  { name: "Leviosa", words: ["leviosa", "wingardium leviosa", "levitate", "float"], color: "#cdb4db",
+    desc: "Feathers and stars float up the screen.", cast() {
     for (let k = 0; k < 35; k++) float(rand(0, canvas.width), canvas.height + rand(0, 200) * dpr, { emoji: ["🪶", "⭐", "✨"], size: 24, vy: -2, spread: 0.6, life: 240 });
     tone(523, { type: "sine", slide: 2, dur: 1.2, vol: 0.15 });
   } },
-  { name: "Expelliarmus", words: ["expelliarmus", "blast", "boom", "push"], color: "#ff4d6d", cast(o) {
+  { name: "Expelliarmus", words: ["expelliarmus", "blast", "push"], color: "#ff4d6d", desc: "A blast wave bursts out of your hand.", cast(o) {
     ring(o.x, o.y, "#ff4d6d", 400); ring(o.x, o.y, "#ffffff", 260);
     burst(o.x, o.y, { count: 80, colors: ["#ff4d6d", "#fff", "#ffbe0b"], speed: 16, gravity: 0, size: 5, life: 50 });
     noise({ dur: 0.5, vol: 0.5, filter: "lowpass", freq: 900 }); buzz(100);
   } },
-  { name: "Rainbow", words: ["rainbow"], color: "#7ae582", cast() {
+  { name: "Rainbow", words: ["rainbow"], color: "#7ae582", desc: "Paints a rainbow across the screen.", cast() {
     fx.rainbow = performance.now() + 5000;
     [523, 659, 784, 1047].forEach((f, k) => setTimeout(() => tone(f, { dur: 0.5 }), k * 110));
   } },
-  { name: "Heal", words: ["heal", "love", "heart"], color: "#ff8fab", cast(o) {
+  { name: "Heal", words: ["heal", "heart"], color: "#ff8fab", desc: "Hearts float up from your hand.", cast(o) {
     for (let k = 0; k < 24; k++) float(o.x, o.y, { emoji: ["💖", "💚", "✨"], size: 26, vy: -3, spread: 2.5, life: 100 });
     tone(659, { dur: 0.6, vol: 0.2 }); tone(988, { dur: 0.8, vol: 0.15 });
   } },
-  { name: "Storm", words: ["storm", "rain"], color: "#90e0ef", cast() {
+  { name: "Storm", words: ["storm", "rain"], color: "#90e0ef", desc: "Rain pours down and thunder strikes.", cast() {
     fx.rain = performance.now() + 7000;
     noise({ dur: 3, vol: 0.2, filter: "highpass", freq: 2000 });
     setTimeout(() => lightningBolt({ x: rand(0, canvas.width), y: canvas.height * 0.7 }), 1200);
   } },
-  { name: "Abracadabra", words: ["abracadabra", "magic", "shazam", "alakazam"], color: "#ffd60a", cast() {
+  { name: "Abracadabra", words: ["abracadabra", "magic", "shazam", "alakazam"], color: "#ffd60a", desc: "Fireworks of confetti and stars.", cast() {
     for (let k = 0; k < 6; k++) setTimeout(() => {
       const x = rand(0.15, 0.85) * canvas.width, y = rand(0.2, 0.7) * canvas.height;
       burst(x, y, { count: 40, colors: CONFETTI, speed: 10, size: 6 });
@@ -947,9 +910,96 @@ const SPELLS = [
       tone(600 + k * 120, { dur: 0.2 });
     }, k * 150);
   } },
+  { name: "Protego", words: ["protego", "shield", "protect"], color: "#4cc9f0", desc: "A glowing shield bubble surrounds your hands.", cast() {
+    fx.shield = performance.now() + 6000;
+    tone(330, { type: "sine", slide: 2, dur: 0.6, vol: 0.2 });
+  } },
+  { name: "Meteor", words: ["meteor", "meteor shower", "meteors"], color: "#ff924c", desc: "Meteors rain down and explode.", cast() {
+    fx.meteor = performance.now() + 4500;
+    noise({ dur: 1.5, vol: 0.25, filter: "bandpass", freq: 300, q: 0.5 });
+  } },
+  { name: "Tornado", words: ["tornado", "twister", "cyclone"], color: "#adb5bd", desc: "A spinning tornado rises from your hand.", cast() {
+    fx.tornado = performance.now() + 5000;
+    noise({ dur: 4, vol: 0.25, filter: "bandpass", freq: 400, q: 0.4 });
+  } },
+  { name: "Accio", words: ["accio", "come here", "summon"], color: "#ffd166", desc: "Sparks fly in from the edges to your hand.", cast(o) {
+    for (let k = 0; k < 70; k++) {
+      const edge = Math.floor(rand(0, 4)), W = canvas.width, H = canvas.height;
+      const x = edge === 0 ? 0 : edge === 1 ? W : rand(0, W), y = edge === 2 ? 0 : edge === 3 ? H : rand(0, H);
+      const life = rand(40, 60);
+      particles.push({ x, y, vx: (o.x - x) / life, vy: (o.y - y) / life, g: 0, life, max: life, size: rand(3, 6) * dpr, color: pick(["#ffd166", "#fff", "#ffbe0b"]), emoji: null });
+    }
+    tone(400, { type: "sine", slide: 2.5, dur: 1, vol: 0.15 });
+  } },
+  { name: "Bombarda", words: ["bombarda", "explode", "explosion", "kaboom", "boom"], color: "#e63946", desc: "A huge explosion that shakes the screen.", cast(o) {
+    explode(o.x, o.y, 1.8); ring(o.x, o.y, "#fff", 500);
+    fx.shake = performance.now() + 700; flash = 0.8;
+  } },
+  { name: "Portal", words: ["portal", "portus", "open portal"], color: "#b5179e", desc: "Opens a swirling portal at your hand.", cast(o) {
+    fx.portal = { x: o.x, y: o.y, until: performance.now() + 6000 };
+    tone(200, { type: "sine", slide: 3, dur: 1.5, vol: 0.2 });
+  } },
+  { name: "Glitter", words: ["glitter", "sparkle", "shine"], color: "#ffafcc", desc: "Glitter falls all over the screen.", cast() {
+    for (let k = 0; k < 120; k++) float(rand(0, canvas.width), rand(-400, 0) * dpr, { colors: CONFETTI.concat(["#fff"]), size: 3, vy: rand(1, 3), spread: 1, life: 220 });
+    [1568, 2093, 2637].forEach((f, k) => setTimeout(() => tone(f, { type: "sine", dur: 0.3, vol: 0.08 }), k * 90));
+  } },
+  { name: "Bubbles", words: ["bubbles", "bubble"], color: "#a0c4ff", desc: "Bubbles float up from your hand.", cast(o) {
+    for (let k = 0; k < 30; k++) float(o.x, o.y, { colors: ["rgba(160,196,255,.55)", "rgba(255,255,255,.5)", "rgba(189,224,254,.6)"], size: 14, vy: -2.5, spread: 2.5, life: 120 });
+    for (let k = 0; k < 5; k++) setTimeout(() => tone(500 + k * 140, { type: "sine", slide: 1.6, dur: 0.12, vol: 0.15 }), k * 80);
+  } },
+  { name: "Ventus", words: ["ventus", "wind", "gust"], color: "#caf0f8", desc: "A gust of wind sweeps across the screen.", cast() {
+    fx.wind = performance.now() + 3000;
+    noise({ dur: 2.5, vol: 0.3, filter: "bandpass", freq: 900, q: 0.3 });
+  } },
+  { name: "Quake", words: ["quake", "earthquake", "terra"], color: "#bc6c25", desc: "The ground shakes and dust flies up.", cast() {
+    fx.shake = performance.now() + 1800;
+    tone(45, { type: "sawtooth", dur: 1.6, vol: 0.25 });
+    for (let k = 0; k < 50; k++) float(rand(0, canvas.width), canvas.height, { colors: ["#bc6c25", "#dda15e", "#606c38"], size: 5, vy: -5, spread: 2, life: 60, gravity: 0.15 });
+  } },
 ];
-// Longest phrases first so "fire ball" wins over "fire"
-const SPELL_WORDS = SPELLS.flatMap(s => s.words.map(w => [w, s])).sort((a, b) => b[0].length - a[0].length);
+
+function castSpell(name, o = castOrigin()) {
+  const spell = SPELLS.find(s => s.name === name);
+  if (!spell) return;
+  spell.cast(o);
+  say(`${spell.name}!`, spell.color);
+}
+
+// Plays an animation drawn in the studio as a spell, in the style its trigger asks for
+function castAnim(anim, o = castOrigin()) {
+  const tr = anim.trigger || {}, W = canvas.width, H = canvas.height;
+  const item = { anim, t0: performance.now(), style: tr.style || "hand", x: o.x, y: o.y, label: o.h?.label,
+    size: (o.h ? o.h.size * 3.2 : Math.min(W, H) * 0.35) * (tr.size || 1), life: duration(anim) * (tr.repeat || 1) };
+  if (item.style === "shoot") { const d = aimFrom(o); item.vx = d.x * 800 * dpr; item.vy = d.y * 800 * dpr; item.life = 5000; }
+  if (item.style === "screen") item.size = Math.min(W, H) * 0.95 * (tr.size || 1);
+  if (item.style === "burst") item.life = Math.max(item.life, 900);
+  liveAnims.push(item);
+  playSound(tr.sound);
+  say(anim.name, "#ffd60a");
+}
+
+function drawLiveAnims(dt, now) {
+  const W = canvas.width, H = canvas.height;
+  liveAnims = liveAnims.filter(it => {
+    const age = now - it.t0;
+    if (age > it.life) return false;
+    if (it.style === "hand") {
+      const h = hands.find(x => x.label === it.label) || hands[0];
+      if (h) { it.x = h.pts[9].x; it.y = h.pts[9].y; }
+      drawAnim(ctx, it.anim, age, it.x, it.y, it.size);
+    } else if (it.style === "shoot") {
+      it.x += it.vx * dt; it.y += it.vy * dt;
+      drawAnim(ctx, it.anim, age, it.x, it.y, it.size);
+      if (it.x < -it.size || it.x > W + it.size || it.y < -it.size || it.y > H + it.size) return false;
+    } else if (it.style === "burst") {
+      const u = age / it.life;
+      drawAnim(ctx, it.anim, age, it.x, it.y, it.size * (0.4 + u * 1.3), { alpha: 1 - u * u });
+    } else drawAnim(ctx, it.anim, age, W / 2, H / 2, it.size);
+    return true;
+  });
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function hearSpeech(type, text) {
   if (type === "ready") { mic.status = "listening"; return; }
@@ -957,14 +1007,13 @@ function hearSpeech(type, text) {
   if (type !== "partial" && type !== "final") return;
   const said = (text || "").toLowerCase();
   if (said) { mic.heard = said; mic.heardAt = performance.now(); }
-  for (const [word, spell] of SPELL_WORDS) {
-    if (mic.cast.has(spell.name)) continue;
-    if (new RegExp(`\\b${word}\\b`).test(said)) {
-      mic.cast.add(spell.name);
-      if (MODES[mode].id !== "magic") continue;
-      spell.cast(castOrigin());
-      say(`${spell.name}!`, spell.color);
-    }
+  for (const t of spellWords()) {
+    if (mic.cast.has(t.key)) continue;
+    if (!new RegExp(`(^|\\W)${escapeRe(t.word)}(\\W|$)`).test(said)) continue;
+    // Each spell casts once per sentence, even as partial results repeat it
+    mic.cast.add(t.key);
+    if (MODES[mode].id !== "magic") continue;
+    if (t.builtin) castSpell(t.builtin); else castAnim(t.anim);
   }
   if (type === "final") mic.cast = new Set();
 }
@@ -1005,12 +1054,22 @@ function updateMicButton() {
   b.classList.toggle("live", mic.on);
 }
 
+const stageEl = document.getElementById("stage");
+
 MODE_HOOKS.magic = {
-  buttons: () => [["🎤 Off", () => (mic.on ? stopMic() : startMic()), "micBtn"]],
+  buttons: () => [["🎤 Off", () => (mic.on ? stopMic() : startMic()), "micBtn"], ["✏️ Studio", openStudio]],
   reset() { startMic(); },
-  leave() { stopMic(); fx = { lumos: 0, dark: 0, frost: 0, rainbow: 0, rain: 0 }; fireballs = []; bolts = []; },
+  leave() { stopMic(); fx = FX0(); fireballs = []; bolts = []; meteors = []; liveAnims = []; stageEl.style.transform = ""; },
+  gesture(h, g) {
+    const t = signalTarget(g);
+    if (!t) return;
+    const o = { x: h.pts[9].x, y: h.pts[9].y, h };
+    if (t.builtin) castSpell(t.builtin, o); else castAnim(t.anim, o);
+  },
   draw(dt, now) {
-    const W = canvas.width, H = canvas.height;
+    const W = canvas.width, H = canvas.height, step = dt * 60;
+    if (fx.shake > now) stageEl.style.transform = `translate(${rand(-9, 9)}px, ${rand(-9, 9)}px)`;
+    else if (stageEl.style.transform) stageEl.style.transform = "";
     if (fx.dark > now) { ctx.fillStyle = "rgba(2,4,12,.82)"; ctx.fillRect(0, 0, W, H); }
     if (fx.frost > now) {
       const a = Math.min(1, (fx.frost - now) / 1000);
@@ -1037,6 +1096,48 @@ MODE_HOOKS.magic = {
       }
       ctx.stroke();
     }
+    if (fx.wind > now) {
+      ctx.strokeStyle = "rgba(235,250,255,.55)"; ctx.lineWidth = 2.5 * dpr; ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let k = 0; k < 40; k++) {
+        const y = (k * 137.1) % H, x = (k * 311.3 + now * 2.6 * dpr) % (W + 300 * dpr) - 150 * dpr;
+        ctx.moveTo(x, y); ctx.quadraticCurveTo(x + 60 * dpr, y - 10 * dpr, x + 140 * dpr, y);
+      }
+      ctx.stroke();
+      for (const p of particles) p.vx += 0.5 * dpr * step;
+    }
+    if (fx.portal && fx.portal.until > now) {
+      const p = fx.portal, a = Math.min(1, (p.until - now) / 800);
+      for (let k = 0; k < 6; k++) {
+        ctx.strokeStyle = k % 2 ? `rgba(181,23,158,${0.7 * a})` : `rgba(251,133,0,${0.7 * a})`;
+        ctx.lineWidth = 5 * dpr;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, (90 - k * 12) * dpr, (130 - k * 16) * dpr, 0, now / (300 + k * 80) + k, now / (300 + k * 80) + k + Math.PI * 1.4); ctx.stroke();
+      }
+      if (Math.random() < 0.7) {
+        const ang = rand(0, Math.PI * 2), r = 260 * dpr, sx = p.x + Math.cos(ang) * r, sy = p.y + Math.sin(ang) * r;
+        particles.push({ x: sx, y: sy, vx: (p.x - sx) / 40, vy: (p.y - sy) / 40, g: 0, life: 40, max: 40, size: 3 * dpr, color: pick(["#b5179e", "#fb8500", "#fff"]), emoji: null });
+      }
+    }
+    if (fx.tornado > now) {
+      const o = castOrigin();
+      for (let k = 0; k < 6; k++) {
+        const hgt = rand(0, 1), ang = now / 120 + hgt * 12 + k;
+        const r = (20 + hgt * 140) * dpr;
+        float(o.x + Math.cos(ang) * r, o.y - hgt * 420 * dpr, { colors: ["#adb5bd", "#dee2e6", "#6c757d"], size: 4, vy: -2, spread: 0.5, life: 20 });
+      }
+    }
+    if (fx.meteor > now && now > nextMeteor) {
+      nextMeteor = now + rand(150, 350);
+      const x = rand(0, W * 1.2);
+      meteors.push({ x, y: -40 * dpr, vx: -rand(250, 450) * dpr, vy: rand(700, 1000) * dpr, ty: rand(0.45, 0.95) * H });
+    }
+    meteors = meteors.filter(m => {
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      float(m.x, m.y, { colors: ["#ffbe0b", "#fb5607", "#adb5bd"], size: 6, vy: -0.5, spread: 1, life: 22 });
+      ctx.fillStyle = "#ffd6a5"; ctx.beginPath(); ctx.arc(m.x, m.y, 12 * dpr, 0, Math.PI * 2); ctx.fill();
+      if (m.y >= m.ty) { explode(m.x, m.y, 0.6); return false; }
+      return true;
+    });
     if (fx.lumos > now) {
       const lights = hands.length ? hands.map(h => h.pts[8]) : [castOrigin()];
       ctx.save();
@@ -1048,6 +1149,15 @@ MODE_HOOKS.magic = {
       }
       ctx.restore();
     }
+    if (fx.shield > now) {
+      const a = Math.min(1, (fx.shield - now) / 800);
+      for (const o of hands.length ? hands.map(h => ({ x: h.pts[9].x, y: h.pts[9].y, r: h.size * 2.4 })) : [{ ...castOrigin(), r: 150 * dpr }]) {
+        const r = o.r * (1 + 0.04 * Math.sin(now / 150));
+        const g = ctx.createRadialGradient(o.x, o.y, r * 0.6, o.x, o.y, r);
+        g.addColorStop(0, "rgba(76,201,240,0)"); g.addColorStop(0.85, `rgba(76,201,240,${0.35 * a})`); g.addColorStop(1, `rgba(200,240,255,${0.8 * a})`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     fireballs = fireballs.filter(f => {
       f.t += dt; f.x += f.vx * dt; f.y += f.vy * dt;
       for (let k = 0; k < 3; k++) float(f.x, f.y, { colors: ["#ffbe0b", "#fb5607", "#ff006e"], size: 9, vy: rand(-1, 1), spread: 2, life: 25 });
@@ -1055,12 +1165,7 @@ MODE_HOOKS.magic = {
       g.addColorStop(0, "#fff"); g.addColorStop(0.3, "#ffd60a"); g.addColorStop(0.7, "rgba(251,86,7,.8)"); g.addColorStop(1, "rgba(251,86,7,0)");
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, f.y, 34 * dpr, 0, Math.PI * 2); ctx.fill();
       const gone = f.t > 1.6 || f.x < 0 || f.x > W || f.y < 0 || f.y > H;
-      if (gone) {
-        const x = Math.max(0, Math.min(W, f.x)), y = Math.max(0, Math.min(H, f.y));
-        ring(x, y, "#fb5607", 300);
-        burst(x, y, { count: 70, colors: ["#ffbe0b", "#fb5607", "#ff006e", "#fff"], speed: 14, size: 6 });
-        noise({ dur: 0.7, vol: 0.6, filter: "lowpass", freq: 500 }); buzz(120);
-      }
+      if (gone) explode(Math.max(0, Math.min(W, f.x)), Math.max(0, Math.min(H, f.y)));
       return !gone;
     });
     bolts = bolts.filter(b => {
@@ -1074,6 +1179,7 @@ MODE_HOOKS.magic = {
       ctx.restore();
       return true;
     });
+    drawLiveAnims(dt, now);
     if (flash > 0) { ctx.fillStyle = `rgba(230,240,255,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); flash = Math.max(0, flash - dt * 4); }
 
     const status = mic.status === "denied" ? "Microphone blocked: allow it for this app in your phone settings"
@@ -1084,287 +1190,32 @@ MODE_HOOKS.magic = {
   },
 };
 
-// ---------- animation studio ----------
-
-const ANIM_GESTURES = ["open", "fist", "peace", "point", "ok", "up", "down"];
-const GESTURE_NAMES = { open: "🖐 Open hand", fist: "✊ Fist", peace: "✌️ Peace", point: "☝️ Point", ok: "👌 OK", up: "👍 Thumbs up", down: "👎 Thumbs down" };
-const INK = ["#ffffff", "#ff006e", "#fb5607", "#ffbe0b", "#7ae582", "#4cc9f0", "#8338ec", "#111111"];
-
-let anims = loadAnims();
-let studio = { anim: 0, frame: 0, color: INK[1], size: 0.015, erase: false, stroke: null, playing: false, playStart: 0 };
-const frameCache = new WeakMap();
-
-function exampleAnims() {
-  const heart = (s) => {
-    const p = [];
-    for (let k = 0; k <= 40; k++) {
-      const t = k / 40 * Math.PI * 2;
-      p.push(0.5 + 16 * Math.pow(Math.sin(t), 3) / 16 * s, 0.48 - (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 16 * s);
-    }
-    return p;
-  };
-  const sun = (rot) => {
-    const strokes = [{ c: "#ffbe0b", s: 0.07, e: false, p: (() => { const p = []; for (let k = 0; k <= 30; k++) { const t = k / 30 * Math.PI * 2; p.push(0.5 + Math.cos(t) * 0.14, 0.5 + Math.sin(t) * 0.14); } return p; })() }];
-    for (let k = 0; k < 8; k++) {
-      const t = rot + k / 8 * Math.PI * 2;
-      strokes.push({ c: "#fb5607", s: 0.035, e: false, p: [0.5 + Math.cos(t) * 0.24, 0.5 + Math.sin(t) * 0.24, 0.5 + Math.cos(t) * 0.38, 0.5 + Math.sin(t) * 0.38] });
-    }
-    return strokes;
-  };
-  return [
-    { name: "Heartbeat (example)", gesture: "peace", smooth: true,
-      frames: [0.28, 0.36, 0.42, 0.34].map(s => ({ dur: 150, strokes: [{ c: "#ff006e", s: 0.05, e: false, p: heart(s) }] })) },
-    { name: "Spinning sun (example)", gesture: "up", smooth: false,
-      frames: [0, 1, 2, 3].map(k => ({ dur: 80, strokes: sun(k / 4 * Math.PI / 4) })) },
-  ];
-}
-
-function loadAnims() {
-  try {
-    const saved = JSON.parse(store("handAnims") || "null");
-    if (Array.isArray(saved) && saved.length) return saved;
-  } catch {}
-  return exampleAnims();
-}
-function saveAnims() { store("handAnims", JSON.stringify(anims)); }
-
-function drawStrokes(c, strokes, size) {
-  c.lineCap = "round"; c.lineJoin = "round";
-  for (const s of strokes) {
-    c.globalCompositeOperation = s.e ? "destination-out" : "source-over";
-    c.strokeStyle = s.c; c.fillStyle = s.c; c.lineWidth = s.s * size;
-    const p = s.p;
-    if (p.length <= 2) { c.beginPath(); c.arc(p[0] * size, p[1] * size, s.s * size / 2, 0, Math.PI * 2); c.fill(); continue; }
-    c.beginPath(); c.moveTo(p[0] * size, p[1] * size);
-    for (let k = 2; k < p.length; k += 2) c.lineTo(p[k] * size, p[k + 1] * size);
-    c.stroke();
-  }
-  c.globalCompositeOperation = "source-over";
-}
-
-// Each frame is kept as strokes and rendered once to a cached canvas until it's edited
-function frameImage(frame, extra = null) {
-  let img = frameCache.get(frame);
-  if (!img || extra) {
-    img = img || document.createElement("canvas");
-    img.width = img.height = 512;
-    const c = img.getContext("2d");
-    c.clearRect(0, 0, 512, 512);
-    drawStrokes(c, extra ? [...frame.strokes, extra] : frame.strokes, 512);
-    frameCache.set(frame, img);
-    if (extra) frameCache.delete(frame);
-  }
-  return img;
-}
-
-// Which keyframe shows at time t (ms), and how far it has blended toward the next one
-function frameAt(anim, t) {
-  const total = anim.frames.reduce((s, f) => s + f.dur, 0) || 1;
-  let tt = t % total;
-  for (let k = 0; k < anim.frames.length; k++) {
-    const f = anim.frames[k];
-    if (tt < f.dur) return { k, blend: anim.smooth ? tt / f.dur : 0 };
-    tt -= f.dur;
-  }
-  return { k: 0, blend: 0 };
-}
-
-function drawAnim(c, anim, t, x, y, size) {
-  if (!anim.frames.length) return;
-  const { k, blend } = frameAt(anim, t);
-  const next = anim.frames[(k + 1) % anim.frames.length];
-  c.globalAlpha = 1 - blend;
-  c.drawImage(frameImage(anim.frames[k]), x - size / 2, y - size / 2, size, size);
-  if (blend > 0) { c.globalAlpha = blend; c.drawImage(frameImage(next), x - size / 2, y - size / 2, size, size); }
-  c.globalAlpha = 1;
-}
-
-const board = document.getElementById("board");
-const bctx = board.getContext("2d");
-const cur = () => anims[studio.anim];
-const curFrame = () => cur().frames[studio.frame];
-
-function renderBoard() {
-  const r = board.getBoundingClientRect();
-  const px = Math.round(r.width * (window.devicePixelRatio || 1));
-  if (board.width !== px) board.width = board.height = px;
-  bctx.clearRect(0, 0, px, px);
-  const a = cur();
-  if (studio.playing) {
-    drawAnim(bctx, a, performance.now() - studio.playStart, px / 2, px / 2, px);
-    return;
-  }
-  if (document.getElementById("onion").checked && studio.frame > 0) {
-    bctx.globalAlpha = 0.25;
-    bctx.drawImage(frameImage(a.frames[studio.frame - 1]), 0, 0, px, px);
-    bctx.globalAlpha = 1;
-  }
-  bctx.drawImage(frameImage(curFrame(), studio.stroke), 0, 0, px, px);
-}
-
-function renderFrames() {
-  const el = document.getElementById("frames");
-  el.replaceChildren();
-  cur().frames.forEach((f, k) => {
-    const c = document.createElement("canvas");
-    c.width = c.height = 128;
-    c.getContext("2d").drawImage(frameImage(f), 0, 0, 128, 128);
-    c.className = k === studio.frame ? "on" : "";
-    c.title = `Frame ${k + 1}`;
-    c.addEventListener("click", () => { studio.frame = k; refreshStudio(); });
-    el.appendChild(c);
-  });
-  const add = document.createElement("button");
-  add.type = "button"; add.textContent = "+"; add.setAttribute("aria-label", "Add frame (copies this one)");
-  add.addEventListener("click", () => {
-    const f = curFrame();
-    cur().frames.splice(studio.frame + 1, 0, { dur: f.dur, strokes: JSON.parse(JSON.stringify(f.strokes)) });
-    studio.frame++;
-    saveAnims(); refreshStudio();
-    el.lastChild.scrollIntoView({ inline: "end", block: "nearest" });
-  });
-  el.appendChild(add);
-}
-
-function refreshStudio() {
-  const a = cur();
-  studio.frame = Math.min(studio.frame, a.frames.length - 1);
-  const sel = document.getElementById("animSel");
-  sel.replaceChildren(...anims.map((x, k) => new Option(x.name || `Animation ${k + 1}`, k)));
-  sel.value = studio.anim;
-  document.getElementById("animName").value = a.name;
-  const gsel = document.getElementById("animGesture");
-  gsel.replaceChildren(new Option("Nothing", ""), ...ANIM_GESTURES.map(g => new Option(GESTURE_NAMES[g], g)));
-  gsel.value = a.gesture || "";
-  document.getElementById("frameDur").value = String(curFrame().dur);
-  document.getElementById("smooth").checked = !!a.smooth;
-  renderFrames();
-  renderBoard();
-}
-
-function openStudio() {
-  document.getElementById("studio").hidden = false;
-  refreshStudio();
-}
-
-function boardPoint(e) {
-  const r = board.getBoundingClientRect();
-  return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))];
-}
-board.addEventListener("pointerdown", (e) => {
-  if (studio.playing) return;
-  board.setPointerCapture(e.pointerId);
-  studio.stroke = { c: studio.color, s: studio.size, e: studio.erase, p: boardPoint(e) };
-  renderBoard();
-});
-board.addEventListener("pointermove", (e) => {
-  if (!studio.stroke) return;
-  studio.stroke.p.push(...boardPoint(e).map(v => Math.round(v * 1000) / 1000));
-  renderBoard();
-});
-const endStroke = () => {
-  if (!studio.stroke) return;
-  curFrame().strokes.push(studio.stroke);
-  studio.stroke = null;
-  frameCache.delete(curFrame());
-  saveAnims(); renderBoard(); renderFrames();
-};
-board.addEventListener("pointerup", endStroke);
-board.addEventListener("pointercancel", endStroke);
-
-const swatches = document.getElementById("swatches");
-INK.forEach((c, k) => {
-  const b = document.createElement("button");
-  b.type = "button"; b.className = "swatch" + (k === 1 ? " on" : "");
-  b.style.background = c; b.setAttribute("aria-label", `Color ${c}`);
-  b.addEventListener("click", () => {
-    studio.color = c; studio.erase = false;
-    document.getElementById("eraser").classList.remove("tool", "on");
-    swatches.querySelectorAll(".swatch").forEach(s => s.classList.toggle("on", s === b));
-  });
-  swatches.appendChild(b);
-});
-document.querySelectorAll("#studio [data-size]").forEach(b => b.addEventListener("click", () => {
-  studio.size = Number(b.dataset.size);
-  document.querySelectorAll("#studio [data-size]").forEach(x => x.classList.toggle("on", x === b));
-}));
-document.getElementById("eraser").addEventListener("click", (e) => {
-  studio.erase = !studio.erase;
-  e.currentTarget.classList.toggle("tool", studio.erase);
-  e.currentTarget.classList.toggle("on", studio.erase);
-});
-document.getElementById("undo").addEventListener("click", () => {
-  curFrame().strokes.pop(); frameCache.delete(curFrame()); saveAnims(); renderBoard(); renderFrames();
-});
-document.getElementById("clearFrame").addEventListener("click", () => {
-  curFrame().strokes = []; frameCache.delete(curFrame()); saveAnims(); renderBoard(); renderFrames();
-});
-document.getElementById("frameDel").addEventListener("click", () => {
-  const a = cur();
-  if (a.frames.length > 1) a.frames.splice(studio.frame, 1);
-  else a.frames[0].strokes = [];
-  studio.frame = Math.max(0, studio.frame - 1);
-  saveAnims(); refreshStudio();
-});
-document.getElementById("frameDur").addEventListener("change", (e) => { curFrame().dur = Number(e.target.value); saveAnims(); });
-document.getElementById("smooth").addEventListener("change", (e) => { cur().smooth = e.target.checked; saveAnims(); });
-document.getElementById("onion").addEventListener("change", renderBoard);
-document.getElementById("animSel").addEventListener("change", (e) => { studio.anim = Number(e.target.value); studio.frame = 0; refreshStudio(); });
-document.getElementById("animName").addEventListener("input", (e) => {
-  cur().name = e.target.value; saveAnims();
-  document.getElementById("animSel").options[studio.anim].text = e.target.value || `Animation ${studio.anim + 1}`;
-});
-document.getElementById("animGesture").addEventListener("change", (e) => {
-  // Each hand signal plays one animation, so taking a signal frees it from any other animation
-  for (const a of anims) if (a !== cur() && a.gesture === e.target.value) a.gesture = "";
-  cur().gesture = e.target.value; saveAnims();
-});
-document.getElementById("animNew").addEventListener("click", () => {
-  anims.push({ name: `Animation ${anims.length + 1}`, gesture: "", smooth: false, frames: [{ dur: 150, strokes: [] }] });
-  studio.anim = anims.length - 1; studio.frame = 0;
-  saveAnims(); refreshStudio();
-});
-document.getElementById("animDel").addEventListener("click", (e) => {
-  const b = e.currentTarget;
-  // Ask once on the button itself, since the app can't show confirm dialogs
-  if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again to delete"; setTimeout(() => { b.dataset.armed = ""; b.textContent = "Delete"; }, 2500); return; }
-  b.dataset.armed = ""; b.textContent = "Delete";
-  anims.splice(studio.anim, 1);
-  if (!anims.length) anims.push({ name: "Animation 1", gesture: "", smooth: false, frames: [{ dur: 150, strokes: [] }] });
-  studio.anim = Math.max(0, studio.anim - 1); studio.frame = 0;
-  saveAnims(); refreshStudio();
-});
-document.getElementById("play").addEventListener("click", (e) => {
-  studio.playing = !studio.playing;
-  studio.playStart = performance.now();
-  e.currentTarget.textContent = studio.playing ? "■ Stop" : "▶ Play";
-  const tick = () => { if (!studio.playing) { renderBoard(); return; } renderBoard(); requestAnimationFrame(tick); };
-  tick();
-});
-document.getElementById("studioDone").addEventListener("click", () => {
-  studio.playing = false; document.getElementById("play").textContent = "▶ Play";
-  document.getElementById("studio").hidden = true;
-});
-
 MODE_HOOKS.anim = {
   buttons: () => [["✏️ Studio", openStudio]],
   draw(dt, now) {
     const W = canvas.width, H = canvas.height;
     let playing = 0;
     for (const h of hands) {
-      const a = anims.find(x => x.gesture && x.gesture === h.gesture);
+      const a = getAnims().find(x => x.trigger?.signal && x.trigger.signal === h.gesture);
       if (!a) continue;
       playing++;
       const st = handState[h.label];
-      drawAnim(ctx, a, now - (st?.since ?? now), h.pts[9].x, h.pts[9].y, h.size * 3.2);
+      drawAnim(ctx, a, now - (st?.since ?? now), h.pts[9].x, h.pts[9].y, h.size * 3.2 * (a.trigger.size || 1));
     }
     if (!playing) {
-      const linked = anims.filter(a => a.gesture);
-      const lines = linked.length ? linked.map(a => `${EMOJI[a.gesture]}  ${a.name}`) : ["No animations linked yet", "Tap ✏️ Studio to draw one"];
+      const linked = getAnims().filter(a => a.trigger?.signal);
+      const lines = linked.length ? linked.map(a => `${EMOJI[a.trigger.signal]}  ${a.name}`) : ["No animations linked to a hand signal yet", "Tap ✏️ Studio to draw one"];
       lines.forEach((t, k) => label(t, W / 2, H * 0.4 + k * 28 * dpr, 18, "#fff", 700));
     }
   },
 };
+
+initStudio({
+  root: document.getElementById("studio"),
+  store,
+  builtins: SPELLS.map(({ name, words, color, desc }) => ({ name, words, color, desc })),
+  playSound,
+});
 
 // ---------- rendering ----------
 
