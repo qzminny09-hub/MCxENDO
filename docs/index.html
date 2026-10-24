@@ -106,6 +106,13 @@ const MODES = [
   { id: "pop", name: "Bubble Pop", help: "Pop the bubbles with your fingertips" },
   { id: "music", name: "Finger Piano", help: "Pinch your thumb to each finger to play a note" },
   { id: "magic", name: "Magic", help: "Move your fingers for sparkles · ✊ for a blast" },
+  { id: "slice", name: "Fruit Slice", help: "Swipe your finger fast to slice fruit · avoid the 💣" },
+  { id: "force", name: "Force Push", help: "🖐 pushes the orbs away · ✊ pulls them in" },
+  { id: "rps", name: "Rock Paper Scissors", help: "Make a fist to start, then throw your move on \"Shoot!\"" },
+  { id: "quiz", name: "Finger Quiz", help: "Hold up the answer with your fingers (use both hands)" },
+  { id: "puppet", name: "Shadow Puppets", help: "🖐 eagle · ☝️ snake · ✌️ bunny · ✊ turtle · 👌 duck · 👍 dog · 👎 fish" },
+  { id: "drums", name: "Air Drums", help: "Tap the pads with your pointer finger" },
+  { id: "splat", name: "Paint Splat", help: "Flick your finger to throw paint · hold 🖐 to clean up" },
 ];
 
 const video = document.getElementById("video");
@@ -152,12 +159,16 @@ function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
   if (canvas.width === w && canvas.height === h) return;
-  const old = document.createElement("canvas");
-  old.width = paint.width; old.height = paint.height;
-  if (paint.width) old.getContext("2d").drawImage(paint, 0, 0);
-  canvas.width = paint.width = w;
-  canvas.height = paint.height = h;
-  pctx.drawImage(old, 0, 0, w, h);
+  canvas.width = w;
+  canvas.height = h;
+  // Keep drawings across a resize or rotation
+  for (const layer of [paint, splatCanvas]) {
+    const old = document.createElement("canvas");
+    old.width = layer.width; old.height = layer.height;
+    if (layer.width) old.getContext("2d").drawImage(layer, 0, 0);
+    layer.width = w; layer.height = h;
+    if (old.width) layer.getContext("2d").drawImage(old, 0, 0, w, h);
+  }
 }
 addEventListener("resize", resize);
 
@@ -174,9 +185,12 @@ function toScreen(p) {
 
 // ---------- gesture recognition ----------
 
+function extended(P) {
+  return [d(P[4], P[17]) > d(P[2], P[17]) * 1.2, ...[8, 12, 16, 20].map(t => d(P[t], P[0]) > d(P[t - 2], P[0]) * 1.1)];
+}
+
 function classify(P, size) {
-  const [i, m, r, p] = [8, 12, 16, 20].map(t => d(P[t], P[0]) > d(P[t - 2], P[0]) * 1.1);
-  const thumb = d(P[4], P[17]) > d(P[2], P[17]) * 1.2;
+  const [thumb, i, m, r, p] = extended(P);
   if (d(P[4], P[8]) < size * 0.35 && m && r && p) return "ok";
   if (i && m && r && p) return "open";
   if (i && !m && !r && p) return "rock";
@@ -261,6 +275,7 @@ function onGesture(h, g, st) {
     say("New color", PEN_COLORS[penColor]);
     ring(h.pts[8].x, h.pts[8].y, PEN_COLORS[penColor], 60);
   }
+  MODE_HOOKS[m]?.gesture?.(h, g, performance.now());
   if (m === "magic" && g === "fist") {
     ring(c.x, c.y, COLORS[h.label], 260);
     burst(c.x, c.y, { count: 90, colors: CONFETTI, speed: 14, gravity: 0.02, size: 5, life: 70 });
@@ -277,6 +292,11 @@ function holdFor(h, st, now) {
     pctx.clearRect(0, 0, paint.width, paint.height);
     burst(h.pts[9].x, h.pts[9].y, { count: 40, colors: PEN_COLORS, speed: 9 });
     say("Cleared");
+  } };
+  if (m === "splat" && st.gesture === "open") return { ms: 1000, color: "#ffffff", act: () => {
+    sctx.clearRect(0, 0, splatCanvas.width, splatCanvas.height);
+    noise({ dur: 0.5, vol: 0.3, filter: "bandpass", freq: 3000, q: 0.5 });
+    say("All clean ✨");
   } };
   return null;
 }
@@ -295,6 +315,16 @@ function processHands(now) {
       onGesture(h, g, st);
     }
     h.gesture = st.gesture;
+    h.fingers = extended(h.pts).filter(Boolean).length;
+
+    // Pointer fingertip velocity in screen pixels per second, for swipes, flicks and drum hits
+    const tip = h.pts[8], prev = st.prevTip;
+    const tdt = prev ? Math.max((now - prev.t) / 1000, 0.001) : 1;
+    h.vx = prev ? (tip.x - prev.x) / tdt : 0;
+    h.vy = prev ? (tip.y - prev.y) / tdt : 0;
+    h.speed = Math.hypot(h.vx, h.vy);
+    h.prevTip = prev;
+    st.prevTip = { x: tip.x, y: tip.y, t: now };
 
     const hold = holdFor(h, st, now);
     h.hold = null;
@@ -343,6 +373,8 @@ function processHands(now) {
     if (m === "gestures" && st.gesture === "rock") {
       for (const t of [8, 20]) float(h.pts[t].x, h.pts[t].y, { colors: ["#ffbe0b", "#fb5607", "#ff006e"], size: 7, vy: -4, spread: 1, life: 30 });
     }
+
+    MODE_HOOKS[m]?.hand?.(h, st, now);
   }
   for (const label of Object.keys(handState)) if (!seen.has(label)) delete handState[label];
 }
@@ -358,7 +390,398 @@ function setMode(i) {
   bubbles = []; score = 0;
   say(m.name);
   tone(523, { dur: 0.15 }); tone(784, { dur: 0.25 });
+  MODE_HOOKS[m.id]?.reset?.();
 }
+
+// ---------- more modes ----------
+
+let noiseBuf = null;
+function noise({ dur = 0.2, vol = 0.3, filter = "highpass", freq = 1000, q = 1 } = {}) {
+  if (!audio) return;
+  if (!noiseBuf) {
+    noiseBuf = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
+    const ch = noiseBuf.getChannelData(0);
+    for (let k = 0; k < ch.length; k++) ch[k] = Math.random() * 2 - 1;
+  }
+  const t = audio.currentTime;
+  const src = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+  src.buffer = noiseBuf;
+  f.type = filter; f.frequency.value = freq; f.Q.value = q;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(audio.destination);
+  src.start(t); src.stop(t + dur + 0.05);
+}
+
+function label(str, x, y, size, color = "#fff", weight = 800) {
+  ctx.font = `${weight} ${size * dpr}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(3, size / 7) * dpr;
+  ctx.strokeStyle = "rgba(0,0,0,.5)";
+  ctx.strokeText(str, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+}
+
+function emojiAt(e, x, y, size, angle = 0, sx = 1, sy = 1) {
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(angle); ctx.scale(sx, sy);
+  ctx.font = `${size}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(e, 0, 0);
+  ctx.restore();
+}
+
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+
+const hudY = () => canvas.height * 0.16;
+
+// Fruit Slice
+const FRUITS = { "🍉": "#ff4d6d", "🍎": "#e63946", "🍊": "#fb8500", "🍋": "#ffd60a", "🍍": "#ffc300", "🍓": "#ef233c", "🥝": "#80b918", "🍑": "#ffad8f" };
+let slice = { items: [], halves: [], score: 0, lives: 3, next: 0, over: 0, best: Number(store("bestSlice")) || 0 };
+
+function cutItem(it, h, now) {
+  it.cut = true;
+  if (it.emoji === "💣") {
+    slice.lives--;
+    ring(it.x, it.y, "#ffbe0b", 320);
+    burst(it.x, it.y, { count: 60, colors: ["#ffbe0b", "#fb5607", "#333"], speed: 14, size: 6 });
+    noise({ dur: 0.6, vol: 0.6, filter: "lowpass", freq: 600 });
+    buzz(200);
+    if (slice.lives <= 0) { slice.over = now + 3000; say("Game over", "#ff4d6d"); }
+    else say("Ouch! 💣", "#ffbe0b");
+    return;
+  }
+  slice.score++;
+  if (slice.score > slice.best) { slice.best = slice.score; store("bestSlice", String(slice.best)); }
+  const len = h.speed || 1, nx = -h.vy / len, ny = h.vx / len;
+  for (const side of [-1, 1]) {
+    slice.halves.push({ emoji: it.emoji, x: it.x, y: it.y, r: it.r, rot: it.rot, side,
+      vx: it.vx + nx * side * 220 * dpr, vy: it.vy + ny * side * 220 * dpr, vr: side * 4 });
+  }
+  burst(it.x, it.y, { count: 22, colors: [FRUITS[it.emoji], "#fff"], speed: 7, size: 5, life: 40 });
+  noise({ dur: 0.12, vol: 0.35, filter: "bandpass", freq: 2500, q: 0.7 });
+  buzz(15);
+}
+
+function physics(o, dt, G) { o.vy += G * dt; o.x += o.vx * dt; o.y += o.vy * dt; o.rot += o.vr * dt; }
+
+// Force Push
+let orbs = [];
+
+// Rock Paper Scissors
+const RPS = { fist: ["rock", "✊"], open: ["paper", "✋"], peace: ["scissors", "✌️"] };
+const BEATS = { rock: "scissors", paper: "rock", scissors: "paper" };
+let rps = { phase: "idle", t: 0, step: -1, you: 0, cpu: 0, mine: null, theirs: null, result: "" };
+
+// Finger Quiz
+let quiz = { q: null, score: 0, holdStart: 0 };
+function newQuestion(prev) {
+  let q;
+  do {
+    if (Math.random() < 0.6) { const a = Math.floor(rand(0, 11)), b = Math.floor(rand(0, 11 - a)); q = { text: `${a} + ${b}`, ans: a + b }; }
+    else { const a = Math.floor(rand(1, 11)), b = Math.floor(rand(0, a + 1)); q = { text: `${a} − ${b}`, ans: a - b }; }
+  } while (prev && q.ans === prev.ans);
+  return q;
+}
+
+// Shadow Puppets (no rock: holding rock switches mode)
+const PUPPETS = {
+  open: ["🦅", "Eagle", () => tone(1400, { type: "sine", slide: 0.6, dur: 0.4, vol: 0.15 })],
+  point: ["🐍", "Snake", () => noise({ dur: 0.7, vol: 0.2, filter: "highpass", freq: 5000 })],
+  peace: ["🐰", "Bunny", () => { tone(900, { dur: 0.1 }); setTimeout(() => tone(1100, { dur: 0.1 }), 120); }],
+  fist: ["🐢", "Turtle", () => tone(120, { type: "sine", dur: 0.6, vol: 0.3 })],
+  ok: ["🦆", "Duck", () => tone(500, { type: "sawtooth", slide: 0.7, dur: 0.2, vol: 0.15 })],
+  up: ["🐶", "Dog", () => { tone(300, { type: "square", slide: 0.6, dur: 0.12, vol: 0.15 }); setTimeout(() => tone(300, { type: "square", slide: 0.6, dur: 0.12, vol: 0.15 }), 180); }],
+  down: ["🐟", "Fish", () => tone(700, { type: "sine", slide: 2, dur: 0.15, vol: 0.2 })],
+};
+
+// Air Drums
+const PADS = [
+  { name: "Crash", color: "#8338ec", play: () => noise({ dur: 1.2, vol: 0.3, filter: "highpass", freq: 4000 }) },
+  { name: "Hi-hat", color: "#4cc9f0", play: () => noise({ dur: 0.06, vol: 0.4, filter: "highpass", freq: 7000 }) },
+  { name: "Clap", color: "#fb5607", play: () => { for (let k = 0; k < 3; k++) setTimeout(() => noise({ dur: 0.08, vol: 0.45, filter: "bandpass", freq: 1200, q: 0.8 }), k * 14); } },
+  { name: "Tom", color: "#7ae582", play: () => tone(220, { type: "sine", slide: 0.5, dur: 0.3, vol: 0.7 }) },
+  { name: "Kick", color: "#ff006e", play: () => tone(150, { type: "sine", slide: 0.3, dur: 0.35, vol: 0.9 }) },
+  { name: "Snare", color: "#ffbe0b", play: () => { noise({ dur: 0.18, vol: 0.5, filter: "highpass", freq: 1500 }); tone(200, { slide: 0.6, dur: 0.1, vol: 0.3 }); } },
+];
+function padLayout() {
+  const w = canvas.width, h = canvas.height;
+  const r = Math.min(w / 3, h * 0.2) * 0.4;
+  const top = h * 0.5, gapY = Math.min(h * 0.2, r * 2.4);
+  return PADS.map((p, k) => ({ p, k, x: w * (0.5 + ((k % 3) - 1) * 0.31), y: top + Math.floor(k / 3) * gapY, r }));
+}
+
+// Paint Splat
+const splatCanvas = document.createElement("canvas");
+const sctx = splatCanvas.getContext("2d");
+function splat(x, y, color) {
+  sctx.fillStyle = color;
+  const r = rand(22, 40) * dpr;
+  sctx.beginPath(); sctx.arc(x, y, r, 0, Math.PI * 2); sctx.fill();
+  for (let k = 0; k < 12; k++) {
+    const a = Math.random() * Math.PI * 2, dd = r * rand(0.6, 1.4);
+    sctx.beginPath(); sctx.arc(x + Math.cos(a) * dd, y + Math.sin(a) * dd, r * rand(0.2, 0.5), 0, Math.PI * 2); sctx.fill();
+  }
+  for (let k = 0; k < 10; k++) {
+    const a = Math.random() * Math.PI * 2, dd = r * rand(1.6, 3.2);
+    sctx.beginPath(); sctx.arc(x + Math.cos(a) * dd, y + Math.sin(a) * dd, r * rand(0.05, 0.15), 0, Math.PI * 2); sctx.fill();
+  }
+  for (let k = 0; k < 3; k++) {
+    const dx = rand(-r * 0.7, r * 0.7), len = rand(r * 0.6, r * 2.2), wd = rand(4, 9) * dpr;
+    sctx.fillRect(x + dx - wd / 2, y, wd, len);
+    sctx.beginPath(); sctx.arc(x + dx, y + len, wd * 0.8, 0, Math.PI * 2); sctx.fill();
+  }
+}
+
+const MODE_HOOKS = {
+  slice: {
+    reset() { slice = { ...slice, items: [], halves: [], score: 0, lives: 3, next: 0, over: 0 }; },
+    hand(h, st, now) {
+      st.trail = (st.trail || []).filter(p => now - p.t < 160);
+      st.trail.push({ x: h.pts[8].x, y: h.pts[8].y, t: now });
+      if (slice.over || !h.prevTip || h.speed < 900 * dpr) return;
+      for (const it of slice.items) if (!it.cut && segDist(it, h.prevTip, h.pts[8]) < it.r) cutItem(it, h, now);
+    },
+    draw(dt, now) {
+      const W = canvas.width, H = canvas.height, G = H * 1.5;
+      if (slice.over && now > slice.over) this.reset();
+      if (!slice.over && now > slice.next) {
+        const n = 1 + Math.floor(Math.random() * Math.min(3, 1 + slice.score / 8));
+        for (let k = 0; k < n; k++) {
+          const x = rand(0.15, 0.85) * W, r = 38 * dpr;
+          slice.items.push({ emoji: Math.random() < 0.15 ? "💣" : pick(Object.keys(FRUITS)), x, y: H + r, r,
+            vx: (W / 2 - x) * rand(0.2, 0.6), vy: -Math.sqrt(2 * G * rand(0.5, 0.8) * H), rot: 0, vr: rand(-3, 3) });
+        }
+        slice.next = now + rand(900, 1600) - Math.min(500, slice.score * 15);
+      }
+      slice.items = slice.items.filter(it => {
+        physics(it, dt, G);
+        if (!it.cut) emojiAt(it.emoji, it.x, it.y, it.r * 2, it.rot);
+        return !it.cut && !(it.vy > 0 && it.y > H + it.r * 2);
+      });
+      slice.halves = slice.halves.filter(o => {
+        physics(o, dt, G);
+        ctx.save();
+        ctx.translate(o.x, o.y); ctx.rotate(o.rot);
+        ctx.beginPath(); ctx.rect(o.side < 0 ? -o.r * 1.5 : 0, -o.r * 1.5, o.r * 1.5, o.r * 3); ctx.clip();
+        ctx.font = `${o.r * 2}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(o.emoji, 0, 0);
+        ctx.restore();
+        return o.y < H + o.r * 2;
+      });
+      for (const st of Object.values(handState)) {
+        const tr = st.trail || [];
+        for (let k = 1; k < tr.length; k++) {
+          ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineCap = "round";
+          ctx.lineWidth = (k / tr.length) * 10 * dpr;
+          ctx.beginPath(); ctx.moveTo(tr[k - 1].x, tr[k - 1].y); ctx.lineTo(tr[k].x, tr[k].y); ctx.stroke();
+        }
+      }
+      label(String(slice.score), W / 2, hudY(), 44);
+      label(`${"❤️".repeat(Math.max(0, slice.lives))}  Best ${slice.best}`, W / 2, hudY() + 26 * dpr, 15, "#fff", 600);
+      if (slice.over) label(`Score ${slice.score}`, W / 2, H * 0.45, 30, "#ffd60a");
+    },
+  },
+
+  force: {
+    reset() {
+      orbs = Array.from({ length: 45 }, () => ({ x: rand(0, canvas.width), y: rand(0, canvas.height), vx: 0, vy: 0, r: rand(10, 22) * dpr, hue: rand(170, 320) }));
+    },
+    gesture(h, g) {
+      if (g === "open") noise({ dur: 0.4, vol: 0.25, filter: "bandpass", freq: 800, q: 0.6 });
+      if (g === "fist") tone(110, { type: "sine", slide: 0.6, dur: 0.5, vol: 0.3 });
+    },
+    draw(dt, now) {
+      const W = canvas.width, H = canvas.height, R = 380 * dpr;
+      const fields = hands.filter(h => h.gesture === "open" || h.gesture === "fist");
+      for (const f of fields) {
+        const c = f.pts[9], push = f.gesture === "open";
+        const ph = (now / 600) % 1;
+        for (let k = 0; k < 3; k++) {
+          const t = push ? (ph + k / 3) % 1 : 1 - (ph + k / 3) % 1;
+          ctx.globalAlpha = 0.5 * (1 - t);
+          ctx.strokeStyle = push ? "#4cc9f0" : "#b5179e"; ctx.lineWidth = 3 * dpr;
+          ctx.beginPath(); ctx.arc(c.x, c.y, R * t * 0.7, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+      const damp = Math.pow(0.96, dt * 60);
+      for (const o of orbs) {
+        for (const f of fields) {
+          const c = f.pts[9], dx = o.x - c.x, dy = o.y - c.y, dist = Math.hypot(dx, dy) || 1;
+          if (dist < R) {
+            const k = (1 - dist / R) * 6000 * dpr * (f.gesture === "open" ? 1 : -1);
+            o.vx += dx / dist * k * dt; o.vy += dy / dist * k * dt;
+          }
+        }
+        o.vx += rand(-20, 20) * dpr * dt; o.vy += rand(-20, 20) * dpr * dt;
+        o.vx *= damp; o.vy *= damp;
+        o.x += o.vx * dt; o.y += o.vy * dt;
+        if (o.x < o.r) { o.x = o.r; o.vx = Math.abs(o.vx) * 0.7; }
+        if (o.x > W - o.r) { o.x = W - o.r; o.vx = -Math.abs(o.vx) * 0.7; }
+        if (o.y < o.r) { o.y = o.r; o.vy = Math.abs(o.vy) * 0.7; }
+        if (o.y > H - o.r) { o.y = H - o.r; o.vy = -Math.abs(o.vy) * 0.7; }
+        const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r * 1.8);
+        g.addColorStop(0, `hsla(${o.hue},100%,85%,1)`);
+        g.addColorStop(0.45, `hsla(${o.hue},100%,60%,.8)`);
+        g.addColorStop(1, `hsla(${o.hue},100%,50%,0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(o.x, o.y, o.r * 1.8, 0, Math.PI * 2); ctx.fill();
+      }
+    },
+  },
+
+  rps: {
+    reset() { rps = { phase: "idle", t: 0, step: -1, you: 0, cpu: 0, mine: null, theirs: null, result: "" }; },
+    gesture(h, g, now) {
+      if (rps.phase === "idle" && g === "fist") { rps.phase = "count"; rps.t = now; rps.step = -1; }
+    },
+    draw(dt, now) {
+      const W = canvas.width, H = canvas.height;
+      label(`You ${rps.you}  ·  Phone ${rps.cpu}`, W / 2, hudY(), 22, "#fff", 700);
+      if (rps.phase === "idle") {
+        label("Make a fist ✊ to play", W / 2, H * 0.42, 26);
+        label("Then show ✊ rock, ✋ paper or ✌️ scissors", W / 2, H * 0.42 + 32 * dpr, 15, "#fff", 600);
+      } else if (rps.phase === "count") {
+        const e = now - rps.t, step = Math.min(3, Math.floor(e / 700));
+        if (step !== rps.step) { rps.step = step; tone(step === 3 ? 880 : 440, { dur: 0.15 }); buzz(20); }
+        label(["Rock…", "Paper…", "Scissors…", "Shoot!"][step], W / 2, H * 0.42, 44, step === 3 ? "#ffd60a" : "#fff");
+        if (e > 2100 + 500) {
+          const g = hands[0]?.gesture;
+          rps.theirs = pick(Object.keys(BEATS));
+          rps.mine = RPS[g]?.[0] ?? null;
+          if (!rps.mine) rps.result = "I couldn't see your move";
+          else if (rps.mine === rps.theirs) rps.result = "Draw!";
+          else if (BEATS[rps.mine] === rps.theirs) { rps.result = "You win! 🎉"; rps.you++; burst(W / 2, H * 0.4, { count: 60, colors: CONFETTI, speed: 10 }); tone(660, { slide: 1.5, dur: 0.3 }); }
+          else { rps.result = "I win! 🤖"; rps.cpu++; tone(300, { slide: 0.5, dur: 0.4, type: "sawtooth", vol: 0.1 }); }
+          rps.phase = "result"; rps.t = now;
+        }
+      } else {
+        const icon = { rock: "✊", paper: "✋", scissors: "✌️" };
+        const y = H * 0.38;
+        emojiAt(icon[rps.mine] ?? "❓", W * 0.3, y, 90 * dpr);
+        emojiAt(icon[rps.theirs], W * 0.7, y, 90 * dpr);
+        label("You", W * 0.3, y + 70 * dpr, 16, "#fff", 600);
+        label("Phone", W * 0.7, y + 70 * dpr, 16, "#fff", 600);
+        label(rps.result, W / 2, y + 120 * dpr, 30, "#ffd60a");
+        if (now - rps.t > 2800) rps.phase = "idle";
+      }
+    },
+  },
+
+  quiz: {
+    reset() { quiz = { q: newQuestion(), score: 0, holdStart: 0 }; },
+    draw(dt, now) {
+      const W = canvas.width, H = canvas.height;
+      const count = hands.reduce((s, h) => s + (h.fingers || 0), 0);
+      label(`Score ${quiz.score}`, W / 2, hudY(), 18, "#fff", 700);
+      label(`${quiz.q.text} = ?`, W / 2, hudY() + 60 * dpr, 52, "#ffd60a");
+      label(hands.length ? `You're showing ${count}` : "Show your hands", W / 2, hudY() + 100 * dpr, 18, "#fff", 600);
+      if (hands.length && count === quiz.q.ans) {
+        quiz.holdStart ||= now;
+        const prog = (now - quiz.holdStart) / 900;
+        const cx = W / 2, cy = H * 0.5;
+        ctx.lineWidth = 8 * dpr; ctx.strokeStyle = "#7ae582";
+        ctx.beginPath(); ctx.arc(cx, cy, 50 * dpr, -Math.PI / 2, -Math.PI / 2 + Math.min(1, prog) * Math.PI * 2); ctx.stroke();
+        if (prog >= 1) {
+          quiz.score++;
+          say(`Correct! ${quiz.q.ans}`, "#7ae582");
+          burst(cx, cy, { count: 60, colors: CONFETTI, speed: 10 });
+          tone(523, { dur: 0.15 }); setTimeout(() => tone(784, { dur: 0.3 }), 120);
+          buzz(40);
+          quiz.q = newQuestion(quiz.q);
+          quiz.holdStart = 0;
+        }
+      } else quiz.holdStart = 0;
+    },
+  },
+
+  puppet: {
+    gesture(h, g) {
+      const p = PUPPETS[g];
+      if (p) { say(p[1]); p[2](); }
+    },
+    draw(dt, now) {
+      const W = canvas.width, H = canvas.height;
+      ctx.fillStyle = "rgba(255,190,110,.22)";
+      ctx.fillRect(0, 0, W, H);
+      const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+      v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.6)");
+      ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+      for (const h of hands) {
+        ctx.strokeStyle = "rgba(10,6,4,.8)"; ctx.fillStyle = "rgba(10,6,4,.8)";
+        ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = h.size * 0.3;
+        ctx.beginPath();
+        for (const [a, b] of BONES) { ctx.moveTo(h.pts[a].x, h.pts[a].y); ctx.lineTo(h.pts[b].x, h.pts[b].y); }
+        ctx.stroke();
+        ctx.beginPath();
+        for (const k of [0, 1, 5, 9, 13, 17]) ctx.lineTo(h.pts[k].x, h.pts[k].y);
+        ctx.fill();
+        const p = PUPPETS[h.gesture];
+        if (!p) continue;
+        const c = h.pts[9], up = { x: h.pts[9].x - h.pts[0].x, y: h.pts[9].y - h.pts[0].y };
+        const angle = Math.atan2(up.y, up.x) + Math.PI / 2;
+        const talk = 1 + Math.min(0.3, d(h.pts[4], h.pts[8]) / h.size * 0.15);
+        const flap = p[0] === "🦅" ? 1 + 0.15 * Math.sin(now / 90) : 1;
+        emojiAt(p[0], c.x, c.y, h.size * 1.7 * talk, angle, 1, flap);
+        if (Math.random() < 0.08) float(c.x, c.y, { colors: ["rgba(255,220,160,.8)"], size: 3, vy: -1, life: 40 });
+      }
+    },
+  },
+
+  drums: {
+    hand(h, st, now) {
+      const tip = h.pts[8];
+      const hit = padLayout().find(pad => Math.hypot(tip.x - pad.x, tip.y - pad.y) < pad.r);
+      const k = hit ? hit.k : -1;
+      if (hit && k !== st.pad && now - (hit.p.last || 0) > 120) {
+        hit.p.last = now; hit.p.play(); buzz(15);
+        ring(hit.x, hit.y, hit.p.color, hit.r * 1.6 / dpr);
+      }
+      st.pad = k;
+    },
+    draw(dt, now) {
+      for (const pad of padLayout()) {
+        const flash = Math.max(0, 1 - (now - (pad.p.last || 0)) / 250);
+        ctx.globalAlpha = 0.3 + flash * 0.6;
+        ctx.fillStyle = pad.p.color;
+        ctx.beginPath(); ctx.arc(pad.x, pad.y, pad.r * (1 + flash * 0.08), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = pad.p.color; ctx.lineWidth = 4 * dpr; ctx.stroke();
+        label(pad.p.name, pad.x, pad.y + 6 * dpr, 16, "#fff", 700);
+      }
+      for (const h of hands) {
+        const p = h.pts[8];
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.arc(p.x, p.y, 9 * dpr, 0, Math.PI * 2); ctx.fill();
+      }
+    },
+  },
+
+  splat: {
+    hand(h, st, now) {
+      if (h.speed < 2200 * dpr || now - (st.lastSplat || 0) < 180) return;
+      st.lastSplat = now;
+      const tip = h.pts[8];
+      splat(tip.x + h.vx * 0.12, tip.y + h.vy * 0.12, pick(CONFETTI));
+      noise({ dur: 0.18, vol: 0.5, filter: "lowpass", freq: 900 });
+      buzz(20);
+    },
+    draw() {
+      ctx.drawImage(splatCanvas, 0, 0);
+      for (const h of hands) {
+        const p = h.pts[8];
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 3 * dpr;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 12 * dpr, 0, Math.PI * 2); ctx.stroke();
+      }
+    },
+  },
+};
 
 // ---------- rendering ----------
 
@@ -445,9 +868,11 @@ function render(now) {
 
   if (m === "draw") ctx.drawImage(paint, 0, 0);
   if (m === "pop") updatePop(dt, now);
+  MODE_HOOKS[m]?.draw?.(dt, now);
 
   for (const h of hands) {
-    drawHand(h, m === "gestures" || m === "music" ? 0.9 : 0.45);
+    const skeleton = { gestures: 0.9, music: 0.9, rps: 0.9, quiz: 0.9, puppet: 0 }[m] ?? 0.45;
+    if (skeleton) drawHand(h, skeleton);
     if (m === "gestures" && h.gesture === "point") drawLaser(h);
     if (m === "draw") {
       const p = h.pts[8];
@@ -535,6 +960,11 @@ function detect() {
     const pts = lm.map(toScreen);
     return { label, pts, size: d(pts[0], pts[9]) || 1, gesture: null };
   });
+  // Two hands sometimes get the same label, which would make them share tracking state; split them by screen side
+  if (hands.length === 2 && hands[0].label === hands[1].label) {
+    const [a, b] = hands[0].pts[0].x < hands[1].pts[0].x ? hands : [hands[1], hands[0]];
+    a.label = "Left"; b.label = "Right";
+  }
   processHands(now);
 
   const byLabel = Object.fromEntries(hands.map(h => [h.label, h.gesture]));
