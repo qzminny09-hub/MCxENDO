@@ -7,11 +7,17 @@ import SimScreen from './src/SimScreen';
 import clothHtml from './src/sims/cloth';
 import waterHtml from './src/sims/water';
 import sandHtml from './src/sims/sand';
+import jellyHtml from './src/sims/jelly';
+import fireworksHtml from './src/sims/fireworks';
+import planetsHtml from './src/sims/planets';
 
 const MODES = [
-  { key: 'cloth', title: 'Cloth', body: 'Pull it, stretch it, rip it apart.', html: clothHtml },
-  { key: 'water', title: 'Water', body: 'Pour, stir and tilt your phone to slosh it.', html: waterHtml },
-  { key: 'sand', title: 'Sand', body: 'Pour grains, build walls, watch it pile up.', html: sandHtml },
+  { key: 'cloth', title: 'Cloth', body: 'Pull, stretch and rip it.', html: clothHtml },
+  { key: 'water', title: 'Water', body: 'Pour, stir, tilt to slosh.', html: waterHtml },
+  { key: 'sand', title: 'Sand', body: 'Pour grains, build walls.', html: sandHtml },
+  { key: 'jelly', title: 'Jelly', body: 'Squish, stretch and throw.', html: jellyHtml },
+  { key: 'fireworks', title: 'Fireworks', body: 'Tap the sky to launch.', html: fireworksHtml },
+  { key: 'planets', title: 'Planets', body: 'Slingshot into orbit.', html: planetsHtml },
 ];
 
 export default function App() {

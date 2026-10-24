@@ -17,13 +17,18 @@ const script = `
   document.body.appendChild(overlay);
   var ctx = overlay.getContext('2d');
 
-  var SPACING = 6.5;
+  var SPACING = 4;
   var GRAVITY = 0.2;
   var DAMPING = 0.992;
-  var ITERATIONS = 24;
-  var TEAR_RATIO = 2.1;
-  var GRIP_TEAR_RATIO = 1.75;
-  var HEM_TEAR_RATIO = 3.4;
+  // Several small sub-steps per frame keep a dense cloth far stiffer than extra solver passes would.
+  var SUBSTEPS = 4;
+  var ITERATIONS = 8;
+  var SUB_GRAVITY = GRAVITY / (SUBSTEPS * SUBSTEPS);
+  var SUB_DAMPING = Math.pow(DAMPING, 1 / SUBSTEPS);
+  var GRIP_FOLLOW = 1 - Math.pow(0.45, 1 / SUBSTEPS);
+  var TEAR_RATIO = 3.4;
+  var GRIP_TEAR_RATIO = 3;
+  var HEM_TEAR_RATIO = 5;
   var STRENGTH_SPREAD = 0.36;
   var GRIP_RADIUS = 18;
   var FRAY = 2.5;
@@ -99,10 +104,10 @@ const script = `
 
     TOP = document.getElementById('bar').getBoundingClientRect().bottom + 30;
     CLOTH_W = Math.min(W - 40, 560);
-    COLS = Math.max(30, Math.min(80, Math.round(CLOTH_W / SPACING) + 1));
+    COLS = Math.max(40, Math.min(140, Math.round(CLOTH_W / SPACING) + 1));
     REST = CLOTH_W / (COLS - 1);
     var clothH = Math.min(H - TOP - 80, CLOTH_W * 1.2);
-    ROWS = Math.max(24, Math.round(clothH / REST) + 1);
+    ROWS = Math.max(36, Math.round(clothH / REST) + 1);
     LEFT = (W - CLOTH_W) / 2;
     N = COLS * ROWS;
     var pinEvery = Math.max(2, Math.round(42 / REST));
@@ -157,14 +162,18 @@ const script = `
   }
 
   function step(t) {
-    var gust = wind ? 0.06 + 0.035 * Math.sin(t * 0.0009) : 0;
+    for (var s = 0; s < SUBSTEPS; s++) substep(t);
+  }
+
+  function substep(t) {
+    var gust = wind ? (0.06 + 0.035 * Math.sin(t * 0.0009)) / (SUBSTEPS * SUBSTEPS) : 0;
     for (var k = 0; k < N; k++) {
       if (pinned[k] || held[k]) continue;
       if (py[k] > H + 400) continue;
-      var vx = (px[k] - ox[k]) * DAMPING;
-      var vy = (py[k] - oy[k]) * DAMPING;
+      var vx = (px[k] - ox[k]) * SUB_DAMPING;
+      var vy = (py[k] - oy[k]) * SUB_DAMPING;
       ox[k] = px[k]; oy[k] = py[k];
-      var fx = 0, fy = GRAVITY;
+      var fx = 0, fy = SUB_GRAVITY;
       if (wind) {
         var col = k % COLS, row = (k / COLS) | 0;
         fx = gust * (0.35 + 0.65 * Math.sin(t * 0.004 + row * 0.18 + col * 0.07));
@@ -179,8 +188,8 @@ const script = `
       for (var g = 0; g < p.pts.length; g++) {
         var h = p.pts[g];
         ox[h] = px[h]; oy[h] = py[h];
-        px[h] += (p.x + p.dx[g] - px[h]) * 0.55;
-        py[h] += (p.y + p.dy[g] - py[h]) * 0.55;
+        px[h] += (p.x + p.dx[g] - px[h]) * GRIP_FOLLOW;
+        py[h] += (p.y + p.dy[g] - py[h]) * GRIP_FOLLOW;
       }
     }
 
