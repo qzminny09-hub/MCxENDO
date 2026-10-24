@@ -14,6 +14,16 @@ import inkHtml from './src/sims/ink';
 import ragdollHtml from './src/sims/ragdoll';
 import glassHtml from './src/sims/glass';
 import marblesHtml from './src/sims/marbles';
+import ropeHtml from './src/sims/rope';
+import lightningHtml from './src/sims/lightning';
+import fireHtml from './src/sims/fire';
+import snowHtml from './src/sims/snow';
+import pendulumHtml from './src/sims/pendulum';
+import fishHtml from './src/sims/fish';
+import bubblesHtml from './src/sims/bubbles';
+import magnetsHtml from './src/sims/magnets';
+import lavaHtml from './src/sims/lava';
+import pondHtml from './src/sims/pond';
 
 const MODES = [
   { key: 'cloth', title: 'Denim', body: 'Pull, cut, burn and pin it.', html: clothHtml },
@@ -26,6 +36,16 @@ const MODES = [
   { key: 'ragdoll', title: 'Ragdoll', body: 'Fling floppy figures around.', html: ragdollHtml },
   { key: 'glass', title: 'Glass', body: 'Crack and smash a window.', html: glassHtml },
   { key: 'marbles', title: 'Marbles', body: 'Drop marbles through pins.', html: marblesHtml },
+  { key: 'rope', title: 'Rope', body: 'Swing weights, cut the ropes.', html: ropeHtml },
+  { key: 'lightning', title: 'Lightning', body: 'Plasma globe and storms.', html: lightningHtml },
+  { key: 'fire', title: 'Fire', body: 'Tend a campfire, paint flames.', html: fireHtml },
+  { key: 'snow', title: 'Snow', body: 'Watch it settle on rooftops.', html: snowHtml },
+  { key: 'pendulum', title: 'Pendulum', body: 'Chaotic double pendulums.', html: pendulumHtml },
+  { key: 'fish', title: 'Fish', body: 'Lure a school, or chase it.', html: fishHtml },
+  { key: 'bubbles', title: 'Bubbles', body: 'Blow bubbles and pop them.', html: bubblesHtml },
+  { key: 'magnets', title: 'Magnets', body: 'Iron filings follow the field.', html: magnetsHtml },
+  { key: 'lava', title: 'Lava', body: 'A lava lamp to stir.', html: lavaHtml },
+  { key: 'pond', title: 'Pond', body: 'Ripples and lily pads.', html: pondHtml },
 ];
 
 export default function App() {
