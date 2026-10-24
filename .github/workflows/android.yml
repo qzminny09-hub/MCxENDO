@@ -41,10 +41,12 @@ jobs:
       - name: Publish download
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: hand-tracker-${{ github.run_number }}
-          name: Hand Tracker build ${{ github.run_number }}
+          # One fixed release whose APK is replaced on every build, so the download link never changes.
+          # Not marked "latest" because the Bliss app in this repo uses that.
+          tag_name: hand-tracker
+          name: Hand Tracker
           target_commitish: ${{ github.sha }}
-          make_latest: true
+          make_latest: false
           files: HandTracker.apk
           body: |
             Download **HandTracker.apk** below on your Android phone, open it, and allow installing from this source when asked.
