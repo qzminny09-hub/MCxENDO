@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A hand skeleton: palm joints and five fingers, tips marked with dots -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#4CC9F0"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M54,76 L38,64 L32,54 M54,76 L44,52 L42,38 M54,76 L54,50 L54,34 M54,76 L63,51 L65,37 M54,76 L70,56 L75,46 M44,52 L54,50 L63,51 L70,56" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,54m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0 M42,38m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0 M54,34m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0 M65,37m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0 M75,46m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0" />
+    <path
+        android:fillColor="#F72585"
+        android:pathData="M54,76m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>
