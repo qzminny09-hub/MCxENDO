@@ -1,6 +1,6 @@
 # Bliss
 
-A physics playground for Android, built with Expo (React Native): Cloth, Water, Sand, Jelly, Fireworks and Planets.
+A physics playground for Android, built with Expo (React Native): Denim, Water, Sand, Jelly, Fireworks, Planets, Ink, Ragdoll, Glass and Marbles.
 
 ## Get it on an Android phone
 

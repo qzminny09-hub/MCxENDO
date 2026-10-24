@@ -10,6 +10,10 @@ import sandHtml from './src/sims/sand';
 import jellyHtml from './src/sims/jelly';
 import fireworksHtml from './src/sims/fireworks';
 import planetsHtml from './src/sims/planets';
+import inkHtml from './src/sims/ink';
+import ragdollHtml from './src/sims/ragdoll';
+import glassHtml from './src/sims/glass';
+import marblesHtml from './src/sims/marbles';
 
 const MODES = [
   { key: 'cloth', title: 'Denim', body: 'Pull, cut, burn and pin it.', html: clothHtml },
@@ -18,6 +22,10 @@ const MODES = [
   { key: 'jelly', title: 'Jelly', body: 'Squish, stretch and throw.', html: jellyHtml },
   { key: 'fireworks', title: 'Fireworks', body: 'Tap the sky to launch.', html: fireworksHtml },
   { key: 'planets', title: 'Planets', body: 'Slingshot into orbit.', html: planetsHtml },
+  { key: 'ink', title: 'Ink', body: 'Swirl colour through liquid.', html: inkHtml },
+  { key: 'ragdoll', title: 'Ragdoll', body: 'Fling floppy figures around.', html: ragdollHtml },
+  { key: 'glass', title: 'Glass', body: 'Crack and smash a window.', html: glassHtml },
+  { key: 'marbles', title: 'Marbles', body: 'Drop marbles through pins.', html: marblesHtml },
 ];
 
 export default function App() {
