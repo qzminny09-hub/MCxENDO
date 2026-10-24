@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0f14">
+<title>Hand Tracker</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: rgba(11, 15, 20, 0.72);
+    --fg: #e8eef5;
+    --muted: #8a97a6;
+    --left: #4cc9f0;
+    --right: #f72585;
+    --accent: #7ae582;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  video, canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+  video.mirror, canvas.mirror { transform: scaleX(-1); }
+  .bar { position: fixed; left: 0; right: 0; display: flex; gap: 8px; align-items: center;
+    padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
+    background: var(--panel); backdrop-filter: blur(8px); z-index: 2; }
+  .top { top: 0; padding-top: calc(10px + env(safe-area-inset-top)); justify-content: space-between; }
+  .bottom { bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); justify-content: center; flex-wrap: wrap; }
+  .title { font-weight: 700; letter-spacing: .02em; }
+  .stat { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .hands { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.08);
+    font-variant-numeric: tabular-nums; font-size: 14px; }
+  .chip b { font-size: 18px; }
+  .chip.left { box-shadow: inset 0 0 0 2px var(--left); }
+  .chip.right { box-shadow: inset 0 0 0 2px var(--right); }
+  button { appearance: none; border: 0; border-radius: 10px; padding: 10px 14px; font: inherit;
+    font-weight: 600; color: var(--bg); background: var(--fg); cursor: pointer; }
+  button.ghost { background: rgba(255,255,255,.12); color: var(--fg); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #start { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; text-align: center;
+    padding: 24px; background: var(--bg); }
+  #start .box { max-width: 340px; display: grid; gap: 16px; }
+  #start h1 { margin: 0; font-size: 28px; }
+  #start p { margin: 0; color: var(--muted); }
+  #start button { font-size: 18px; padding: 14px 20px; background: var(--accent); }
+  #msg { color: #ffb4a2; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="video" playsinline muted></video>
+  <canvas id="overlay"></canvas>
+</div>
+
+<div class="bar top">
+  <span class="title">Hand Tracker</span>
+  <span class="stat" id="fps">-- fps</span>
+</div>
+
+<div class="bar bottom">
+  <div class="hands" id="hands"><span class="stat">Show your hands to the camera</span></div>
+  <button class="ghost" id="flip" type="button">Switch camera</button>
+</div>
+
+<div id="start">
+  <div class="box">
+    <h1>Hand Tracker</h1>
+    <p>Tracks up to 2 hands and all 21 joints on each, and counts raised fingers. Everything runs on your phone; no video leaves the device.</p>
+    <button id="go" type="button">Start camera</button>
+    <div id="msg"></div>
+  </div>
+</div>
+
+<script type="module">
+import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+
+// Bone pairs between the 21 landmarks (wrist = 0, thumb 1-4, index 5-8, middle 9-12, ring 13-16, pinky 17-20)
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+const TIPS = [4, 8, 12, 16, 20];
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("overlay");
+const ctx = canvas.getContext("2d");
+const handsEl = document.getElementById("hands");
+const fpsEl = document.getElementById("fps");
+const msg = document.getElementById("msg");
+const css = getComputedStyle(document.documentElement);
+const COLORS = { Left: css.getPropertyValue("--left").trim(), Right: css.getPropertyValue("--right").trim() };
+
+let landmarker = null;
+let facing = "user";
+let stream = null;
+let lastVideoTime = -1;
+let frames = 0, fpsT = performance.now();
+
+async function loadModel() {
+  const files = await FilesetResolver.forVisionTasks(WASM);
+  const opts = (delegate) => ({
+    baseOptions: { modelAssetPath: MODEL, delegate },
+    runningMode: "VIDEO",
+    numHands: 2,
+  });
+  try {
+    return await HandLandmarker.createFromOptions(files, opts("GPU"));
+  } catch {
+    return await HandLandmarker.createFromOptions(files, opts("CPU"));
+  }
+}
+
+async function startCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+  });
+  video.srcObject = stream;
+  await video.play();
+  const mirror = facing === "user";
+  video.classList.toggle("mirror", mirror);
+  canvas.classList.toggle("mirror", mirror);
+}
+
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
+
+function countFingers(lm, label) {
+  let n = 0;
+  // Four fingers: tip farther from the wrist than the middle joint means it's extended
+  for (const tip of [8, 12, 16, 20]) {
+    if (dist(lm[tip], lm[0]) > dist(lm[tip - 2], lm[0])) n++;
+  }
+  // Thumb: tip farther from the pinky base than the thumb's lower joint
+  if (dist(lm[4], lm[17]) > dist(lm[2], lm[17]) * 1.15) n++;
+  return n;
+}
+
+function draw(result) {
+  const w = canvas.width = video.videoWidth;
+  const h = canvas.height = video.videoHeight;
+  ctx.clearRect(0, 0, w, h);
+  const s = Math.max(w, h) / 640;
+  const chips = [];
+
+  result.landmarks.forEach((lm, i) => {
+    // MediaPipe labels handedness as seen in a mirrored image; flip it for the back camera
+    let label = result.handednesses[i]?.[0]?.categoryName ?? "Right";
+    if (facing !== "user") label = label === "Left" ? "Right" : "Left";
+    const color = COLORS[label];
+
+    ctx.lineWidth = 4 * s;
+    ctx.strokeStyle = color;
+    ctx.lineCap = "round";
+    for (const [a, b] of BONES) {
+      ctx.beginPath();
+      ctx.moveTo(lm[a].x * w, lm[a].y * h);
+      ctx.lineTo(lm[b].x * w, lm[b].y * h);
+      ctx.stroke();
+    }
+    lm.forEach((p, j) => {
+      ctx.beginPath();
+      ctx.arc(p.x * w, p.y * h, (TIPS.includes(j) ? 8 : 5) * s, 0, Math.PI * 2);
+      ctx.fillStyle = TIPS.includes(j) ? "#ffffff" : color;
+      ctx.fill();
+    });
+
+    chips.push(`<span class="chip ${label.toLowerCase()}">${label} hand: <b>${countFingers(lm, label)}</b> fingers</span>`);
+  });
+
+  handsEl.innerHTML = chips.length ? chips.join("") : '<span class="stat">Show your hands to the camera</span>';
+}
+
+function loop() {
+  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    draw(landmarker.detectForVideo(video, performance.now()));
+    frames++;
+    const now = performance.now();
+    if (now - fpsT >= 1000) {
+      fpsEl.textContent = `${Math.round(frames * 1000 / (now - fpsT))} fps`;
+      frames = 0; fpsT = now;
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+document.getElementById("go").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  msg.textContent = "";
+  try {
+    btn.textContent = "Opening camera...";
+    await startCamera();
+    btn.textContent = "Loading hand model...";
+    landmarker = await loadModel();
+    document.getElementById("start").hidden = true;
+    requestAnimationFrame(loop);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Try again";
+    msg.textContent = err.name === "NotAllowedError"
+      ? "Camera access was blocked. Allow the camera for this site in your browser settings, then try again."
+      : `Couldn't start: ${err.message || err}`;
+  }
+});
+
+document.getElementById("flip").addEventListener("click", async () => {
+  facing = facing === "user" ? "environment" : "user";
+  try { await startCamera(); } catch (err) { msg.textContent = err.message; }
+});
+</script>
+</body>
+</html>
