@@ -22,32 +22,35 @@
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg);
     font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-  #stage { position: fixed; inset: 0; display: grid; place-items: center; }
-  video, canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-  video.mirror, canvas.mirror { transform: scaleX(-1); }
+  #stage { position: fixed; inset: 0; }
+  video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  video { object-fit: cover; }
+  video.mirror { transform: scaleX(-1); }
   .bar { position: fixed; left: 0; right: 0; display: flex; gap: 8px; align-items: center;
     padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
     background: var(--panel); backdrop-filter: blur(8px); z-index: 2; }
   .top { top: 0; padding-top: calc(10px + env(safe-area-inset-top)); justify-content: space-between; }
-  .bottom { bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); justify-content: center; flex-wrap: wrap; }
+  .bottom { bottom: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; }
   .title { font-weight: 700; letter-spacing: .02em; }
-  .stat { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
-  .hands { display: flex; gap: 8px; flex-wrap: wrap; }
-  .chip { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.08);
-    font-variant-numeric: tabular-nums; font-size: 14px; }
-  .chip b { font-size: 18px; }
-  .chip.left { box-shadow: inset 0 0 0 2px var(--left); }
-  .chip.right { box-shadow: inset 0 0 0 2px var(--right); }
-  button { appearance: none; border: 0; border-radius: 10px; padding: 10px 14px; font: inherit;
-    font-weight: 600; color: var(--bg); background: var(--fg); cursor: pointer; }
-  button.ghost { background: rgba(255,255,255,.12); color: var(--fg); }
+  .readout { display: flex; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; }
+  .hand { font-size: 13px; color: var(--muted); }
+  .hand b { font-size: 20px; font-weight: 400; color: var(--fg); }
+  .stat { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  #help { text-align: center; color: var(--fg); font-size: 14px; }
+  #tip { text-align: center; color: var(--muted); font-size: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .modes { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
+  .modes::-webkit-scrollbar { display: none; }
+  button { appearance: none; border: 0; border-radius: 10px; padding: 9px 12px; font: inherit;
+    font-weight: 600; color: var(--fg); background: rgba(255,255,255,.12); cursor: pointer; white-space: nowrap; }
+  button.on { background: var(--fg); color: var(--bg); }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   #start { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; text-align: center;
     padding: 24px; background: var(--bg); }
   #start .box { max-width: 340px; display: grid; gap: 16px; }
   #start h1 { margin: 0; font-size: 28px; }
   #start p { margin: 0; color: var(--muted); }
-  #start button { font-size: 18px; padding: 14px 20px; background: var(--accent); }
+  #start button { font-size: 18px; padding: 14px 20px; background: var(--accent); color: var(--bg); }
   #msg { color: #ffb4a2; min-height: 1.4em; }
 </style>
 </head>
@@ -58,19 +61,27 @@
 </div>
 
 <div class="bar top">
-  <span class="title">Hand Tracker</span>
-  <span class="stat" id="fps">-- fps</span>
+  <span class="title" id="modeName">Gestures</span>
+  <div class="readout">
+    <span class="hand">L <b id="gL">·</b></span>
+    <span class="hand">R <b id="gR">·</b></span>
+    <span class="stat" id="fps">--</span>
+  </div>
 </div>
 
 <div class="bar bottom">
-  <div class="hands" id="hands"><span class="stat">Show your hands to the camera</span></div>
-  <button class="ghost" id="flip" type="button">Switch camera</button>
+  <div id="help"></div>
+  <div id="tip">Hold 🤘 to switch mode</div>
+  <div class="row">
+    <div class="modes" id="modes"></div>
+    <button id="flip" type="button" aria-label="Switch camera">🔄</button>
+  </div>
 </div>
 
 <div id="start">
   <div class="box">
     <h1>Hand Tracker</h1>
-    <p>Tracks up to 2 hands and all 21 joints on each, and counts raised fingers. Everything runs on your phone; no video leaves the device.</p>
+    <p>Make hand signals to set off effects, draw in the air, pop bubbles, and play a finger piano. Everything runs on your phone; no video leaves the device.</p>
     <button id="go" type="button">Start camera</button>
     <div id="msg"></div>
   </div>
@@ -87,10 +98,21 @@ const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,
   [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
 const TIPS = [4, 8, 12, 16, 20];
 
+const EMOJI = { open: "🖐", fist: "✊", peace: "✌️", point: "☝️", rock: "🤘", ok: "👌", up: "👍", down: "👎" };
+
+const MODES = [
+  { id: "gestures", name: "Gestures", help: "Try 👍 👎 ✌️ 🖐 ✊ 👌 ☝️ 🤘" },
+  { id: "draw", name: "Air Draw", help: "☝️ draw · ✌️ new color · ✊ lift pen · hold 🖐 to clear" },
+  { id: "pop", name: "Bubble Pop", help: "Pop the bubbles with your fingertips" },
+  { id: "music", name: "Finger Piano", help: "Pinch your thumb to each finger to play a note" },
+  { id: "magic", name: "Magic", help: "Move your fingers for sparkles · ✊ for a blast" },
+];
+
 const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
 const ctx = canvas.getContext("2d");
-const handsEl = document.getElementById("hands");
+const paint = document.createElement("canvas");
+const pctx = paint.getContext("2d");
 const fpsEl = document.getElementById("fps");
 const msg = document.getElementById("msg");
 const css = getComputedStyle(document.documentElement);
@@ -99,21 +121,446 @@ const COLORS = { Left: css.getPropertyValue("--left").trim(), Right: css.getProp
 let landmarker = null;
 let facing = "user";
 let stream = null;
+let audio = null;
 let lastVideoTime = -1;
 let frames = 0, fpsT = performance.now();
+let dpr = 1;
+let view = { s: 1, ox: 0, oy: 0, vw: 1, vh: 1 };
+let mode = 0;
+let hands = [];          // hands seen in the latest frame: { label, pts, size, gesture }
+const handState = {};    // per hand label: gesture smoothing, holds, pinches, pen
+let particles = [];
+let rings = [];
+let banner = null;
+let lastFrame = performance.now();
+
+// ---------- helpers ----------
+
+const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const buzz = (ms) => { try { navigator.vibrate?.(ms); } catch {} };
+
+function store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    localStorage.setItem(key, value);
+  } catch { return null; }
+}
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (canvas.width === w && canvas.height === h) return;
+  const old = document.createElement("canvas");
+  old.width = paint.width; old.height = paint.height;
+  if (paint.width) old.getContext("2d").drawImage(paint, 0, 0);
+  canvas.width = paint.width = w;
+  canvas.height = paint.height = h;
+  pctx.drawImage(old, 0, 0, w, h);
+}
+addEventListener("resize", resize);
+
+// Maps a normalized landmark to screen pixels, matching the video's object-fit: cover crop and mirroring
+function updateView() {
+  const vw = video.videoWidth || 1, vh = video.videoHeight || 1;
+  const s = Math.max(canvas.width / vw, canvas.height / vh);
+  view = { s, vw, vh, ox: (canvas.width - vw * s) / 2, oy: (canvas.height - vh * s) / 2 };
+}
+function toScreen(p) {
+  const x = facing === "user" ? 1 - p.x : p.x;
+  return { x: view.ox + x * view.vw * view.s, y: view.oy + p.y * view.vh * view.s };
+}
+
+// ---------- gesture recognition ----------
+
+function classify(P, size) {
+  const [i, m, r, p] = [8, 12, 16, 20].map(t => d(P[t], P[0]) > d(P[t - 2], P[0]) * 1.1);
+  const thumb = d(P[4], P[17]) > d(P[2], P[17]) * 1.2;
+  if (d(P[4], P[8]) < size * 0.35 && m && r && p) return "ok";
+  if (i && m && r && p) return "open";
+  if (i && !m && !r && p) return "rock";
+  if (i && m && !r && !p) return "peace";
+  if (i && !m && !r && !p) return "point";
+  if (!i && !m && !r && !p) {
+    if (thumb && P[4].y < P[2].y - size * 0.5) return "up";
+    if (thumb && P[4].y > P[2].y + size * 0.5) return "down";
+    return "fist";
+  }
+  return null;
+}
+
+function stateFor(label) {
+  return handState[label] ??= { cand: null, count: 0, gesture: null, since: 0, held: false, pinch: [false, false, false, false], pen: null };
+}
+
+// ---------- effects ----------
+
+function burst(x, y, { count = 30, colors = ["#fff"], emoji = null, speed = 6, gravity = 0.15, size = 6, life = 60 } = {}) {
+  for (let k = 0; k < count; k++) {
+    const a = Math.random() * Math.PI * 2, v = rand(0.3, 1) * speed * dpr;
+    particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: gravity * dpr,
+      life, max: life, size: rand(0.6, 1.2) * size * dpr, color: pick(colors), emoji: emoji && pick(emoji) });
+  }
+}
+
+function float(x, y, { emoji = null, colors = ["#fff"], size = 6, vy = -2, spread = 1, life = 50, gravity = 0 } = {}) {
+  particles.push({ x: x + rand(-8, 8) * dpr, y, vx: rand(-spread, spread) * dpr, vy: vy * dpr * rand(0.6, 1.2), g: gravity * dpr,
+    life, max: life, size: rand(0.6, 1.2) * size * dpr, color: pick(colors), emoji: emoji && pick(emoji) });
+}
+
+function ring(x, y, color, max = 160) { rings.push({ x, y, color, t: 0, max: max * dpr }); }
+
+function say(text, color = "#fff") { banner = { text, color, t: 0 }; }
+
+function tone(freq, { type = "triangle", dur = 0.6, vol = 0.25, slide = 0 } = {}) {
+  if (!audio) return;
+  const t = audio.currentTime;
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audio.destination);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+
+// ---------- modes ----------
+
+const CONFETTI = ["#ffbe0b", "#fb5607", "#ff006e", "#8338ec", "#3a86ff", "#7ae582"];
+
+// One-shot effects when a hand settles into a new gesture in Gestures mode
+const GESTURE_FX = {
+  up:    (h, c) => { burst(c.x, c.y, { count: 70, colors: CONFETTI, speed: 10, size: 7 }); say("Nice! 👍", "#7ae582"); tone(660, { slide: 1.5, dur: 0.3 }); },
+  down:  (h, c) => { for (let k = 0; k < 25; k++) float(rand(0, canvas.width), rand(-200, 0) * dpr, { emoji: ["👎", "💧"], size: 26, vy: 4, life: 120 }); say("Boo!", "#8a97a6"); tone(220, { slide: 0.5, dur: 0.5, type: "sawtooth", vol: 0.12 }); },
+  peace: (h, c) => { for (let k = 0; k < 16; k++) float(c.x, c.y, { emoji: ["❤️", "💖", "💕"], size: 28, vy: -3, spread: 2, life: 90 }); say("Peace ✌️", "#ff8fab"); tone(523, { dur: 0.4 }); tone(784, { dur: 0.5 }); },
+  open:  (h, c) => { ring(c.x, c.y, "#ffffff", 220); burst(c.x, c.y, { count: 40, colors: ["#fff", "#bde0fe"], speed: 7, gravity: 0 }); say("Hi! 👋"); tone(440, { dur: 0.3 }); },
+  fist:  (h, c) => { ring(c.x, c.y, "#ffbe0b", 300); ring(c.x, c.y, "#fb5607", 200); burst(c.x, c.y, { count: 50, colors: ["#ffbe0b", "#fb5607", "#fff"], speed: 12, gravity: 0.05, size: 5 }); say("BOOM ✊", "#ffbe0b"); tone(90, { type: "square", slide: 0.4, dur: 0.4, vol: 0.2 }); buzz(60); },
+  ok:    (h, c) => { burst(c.x, c.y, { count: 20, emoji: ["⭐", "✨", "🌟"], speed: 6, size: 24, gravity: 0.05, life: 70 }); say("Perfect 👌", "#ffd60a"); tone(880, { dur: 0.25 }); tone(1320, { dur: 0.35 }); },
+  point: () => { say("Laser ☝️", "#ff4d6d"); },
+  rock:  () => { say("Rock on 🤘", "#fb5607"); tone(196, { type: "sawtooth", dur: 0.5, vol: 0.1 }); },
+};
+
+const PEN_COLORS = ["#ff006e", "#ffbe0b", "#7ae582", "#4cc9f0", "#ffffff", "#8338ec"];
+let penColor = 0;
+
+const NOTE_FREQ = { Left: [261.63, 293.66, 329.63, 392.0], Right: [440.0, 523.25, 587.33, 659.25] };
+const NOTE_LABEL = { Left: ["C", "D", "E", "G"], Right: ["A", "C", "D", "E"] };
+
+let bubbles = [], score = 0, best = Number(store("bestPop")) || 0, nextBubble = 0;
+
+function onGesture(h, g, st) {
+  if (!g) return;
+  const c = h.pts[9];
+  const m = MODES[mode].id;
+  if (m === "gestures") { GESTURE_FX[g]?.(h, c); buzz(25); }
+  if (m === "draw" && g === "peace") {
+    penColor = (penColor + 1) % PEN_COLORS.length;
+    say("New color", PEN_COLORS[penColor]);
+    ring(h.pts[8].x, h.pts[8].y, PEN_COLORS[penColor], 60);
+  }
+  if (m === "magic" && g === "fist") {
+    ring(c.x, c.y, COLORS[h.label], 260);
+    burst(c.x, c.y, { count: 90, colors: CONFETTI, speed: 14, gravity: 0.02, size: 5, life: 70 });
+    tone(130, { type: "square", slide: 3, dur: 0.35, vol: 0.12 });
+    buzz(40);
+  }
+}
+
+// Gestures that do something when held, shown with a progress ring
+function holdFor(h, st, now) {
+  const m = MODES[mode].id;
+  if (st.gesture === "rock") return { ms: 1500, color: "#fb5607", act: () => setMode((mode + 1) % MODES.length) };
+  if (m === "draw" && st.gesture === "open") return { ms: 1000, color: "#ffffff", act: () => {
+    pctx.clearRect(0, 0, paint.width, paint.height);
+    burst(h.pts[9].x, h.pts[9].y, { count: 40, colors: PEN_COLORS, speed: 9 });
+    say("Cleared");
+  } };
+  return null;
+}
+
+function processHands(now) {
+  const m = MODES[mode].id;
+  const seen = new Set();
+  for (const h of hands) {
+    seen.add(h.label);
+    const st = stateFor(h.label);
+    const g = classify(h.pts, h.size);
+    // A gesture counts once it holds steady for a few frames, which filters out flicker between poses
+    if (g === st.cand) st.count++; else { st.cand = g; st.count = 1; }
+    if (st.count >= 4 && st.gesture !== g) {
+      st.gesture = g; st.since = now; st.held = false;
+      onGesture(h, g, st);
+    }
+    h.gesture = st.gesture;
+
+    const hold = holdFor(h, st, now);
+    h.hold = null;
+    if (hold && !st.held) {
+      const prog = (now - st.since) / hold.ms;
+      if (prog >= 1) { st.held = true; hold.act(); buzz(50); }
+      else if (prog > 0.15) h.hold = { prog, color: hold.color };
+    }
+
+    if (m === "draw") {
+      const tip = h.pts[8];
+      if (st.gesture === "point") {
+        const target = st.pen ? { x: st.pen.x + (tip.x - st.pen.x) * 0.5, y: st.pen.y + (tip.y - st.pen.y) * 0.5 } : tip;
+        if (st.pen) {
+          pctx.strokeStyle = PEN_COLORS[penColor];
+          pctx.lineWidth = 9 * dpr;
+          pctx.lineCap = "round";
+          pctx.beginPath(); pctx.moveTo(st.pen.x, st.pen.y); pctx.lineTo(target.x, target.y); pctx.stroke();
+        }
+        st.pen = target;
+      } else st.pen = null;
+    }
+
+    if (m === "music") {
+      [8, 12, 16, 20].forEach((tip, k) => {
+        const r = d(h.pts[4], h.pts[tip]) / h.size;
+        if (!st.pinch[k] && r < 0.28) {
+          st.pinch[k] = true;
+          tone(NOTE_FREQ[h.label][k], { dur: 0.9, vol: 0.3 });
+          const p = h.pts[tip];
+          ring(p.x, p.y, COLORS[h.label], 90);
+          float(p.x, p.y, { emoji: ["🎵", "🎶"], size: 26, vy: -2.5, life: 60 });
+          buzz(15);
+        } else if (st.pinch[k] && r > 0.4) st.pinch[k] = false;
+      });
+    }
+
+    if (m === "magic") {
+      for (const t of TIPS) {
+        const p = h.pts[t];
+        const hue = (now / 10 + t * 20 + (h.label === "Left" ? 180 : 0)) % 360;
+        float(p.x, p.y, { colors: [`hsl(${hue} 100% 65%)`], size: 5, vy: rand(-1.5, 0.5), spread: 1.2, life: 40 });
+      }
+    }
+
+    if (m === "gestures" && st.gesture === "rock") {
+      for (const t of [8, 20]) float(h.pts[t].x, h.pts[t].y, { colors: ["#ffbe0b", "#fb5607", "#ff006e"], size: 7, vy: -4, spread: 1, life: 30 });
+    }
+  }
+  for (const label of Object.keys(handState)) if (!seen.has(label)) delete handState[label];
+}
+
+function setMode(i) {
+  mode = i;
+  const m = MODES[mode];
+  document.getElementById("modeName").textContent = m.name;
+  document.getElementById("help").textContent = m.help;
+  document.querySelectorAll("#modes button").forEach((b, k) => b.classList.toggle("on", k === mode));
+  document.querySelector("#modes .on")?.scrollIntoView({ inline: "center", block: "nearest" });
+  for (const st of Object.values(handState)) { st.pen = null; st.held = true; }
+  bubbles = []; score = 0;
+  say(m.name);
+  tone(523, { dur: 0.15 }); tone(784, { dur: 0.25 });
+}
+
+// ---------- rendering ----------
+
+function drawHand(h, alpha) {
+  const color = COLORS[h.label];
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (const [a, b] of BONES) { ctx.moveTo(h.pts[a].x, h.pts[a].y); ctx.lineTo(h.pts[b].x, h.pts[b].y); }
+  ctx.stroke();
+  h.pts.forEach((p, j) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, (TIPS.includes(j) ? 6 : 3.5) * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = TIPS.includes(j) ? "#fff" : color;
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawLaser(h) {
+  const a = h.pts[5], b = h.pts[8];
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const L = Math.hypot(canvas.width, canvas.height);
+  const end = { x: b.x + (b.x - a.x) / len * L, y: b.y + (b.y - a.y) / len * L };
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.shadowColor = "#ff4d6d"; ctx.shadowBlur = 20 * dpr;
+  ctx.strokeStyle = "rgba(255,77,109,.9)"; ctx.lineWidth = 8 * dpr;
+  ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5 * dpr;
+  ctx.stroke();
+  ctx.restore();
+  if (Math.random() < 0.6) float(b.x, b.y, { colors: ["#ff4d6d", "#fff"], size: 4, vy: rand(-2, 2), spread: 3, life: 20 });
+}
+
+function updatePop(dt, now) {
+  if (now > nextBubble) {
+    const r = rand(28, 55) * dpr;
+    bubbles.push({ x: rand(r, canvas.width - r), y: canvas.height + r, r, vy: rand(70, 150) * dpr, hue: rand(0, 360), ph: Math.random() * 6 });
+    nextBubble = now + Math.max(350, 900 - score * 12);
+  }
+  const tips = hands.flatMap(h => TIPS.map(t => h.pts[t]));
+  bubbles = bubbles.filter(b => {
+    b.y -= b.vy * dt;
+    b.ph += dt * 2;
+    const x = b.x + Math.sin(b.ph) * 12 * dpr;
+    if (tips.some(p => Math.hypot(p.x - x, p.y - b.y) < b.r + 10 * dpr)) {
+      score++;
+      if (score > best) { best = score; store("bestPop", String(best)); }
+      burst(x, b.y, { count: 18, colors: [`hsl(${b.hue} 90% 75%)`, "#fff"], speed: 5, size: 4, life: 35 });
+      tone(500 + Math.random() * 400, { type: "sine", slide: 0.3, dur: 0.12, vol: 0.2 });
+      buzz(10);
+      return false;
+    }
+    return b.y > -b.r;
+  });
+  for (const b of bubbles) {
+    const x = b.x + Math.sin(b.ph) * 12 * dpr;
+    const g = ctx.createRadialGradient(x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.1, x, b.y, b.r);
+    g.addColorStop(0, "rgba(255,255,255,.55)");
+    g.addColorStop(0.7, `hsla(${b.hue},90%,70%,.18)`);
+    g.addColorStop(1, `hsla(${b.hue},90%,75%,.55)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `hsla(${b.hue},90%,85%,.7)`; ctx.lineWidth = 2 * dpr; ctx.stroke();
+  }
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.font = `700 ${44 * dpr}px system-ui, sans-serif`;
+  const top = canvas.height * 0.16;
+  ctx.fillText(score, canvas.width / 2, top);
+  ctx.font = `500 ${14 * dpr}px system-ui, sans-serif`;
+  ctx.fillStyle = "rgba(255,255,255,.75)";
+  ctx.fillText(`Best ${best}`, canvas.width / 2, top + 22 * dpr);
+}
+
+function render(now) {
+  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  lastFrame = now;
+  const m = MODES[mode].id;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (m === "draw") ctx.drawImage(paint, 0, 0);
+  if (m === "pop") updatePop(dt, now);
+
+  for (const h of hands) {
+    drawHand(h, m === "gestures" || m === "music" ? 0.9 : 0.45);
+    if (m === "gestures" && h.gesture === "point") drawLaser(h);
+    if (m === "draw") {
+      const p = h.pts[8];
+      ctx.beginPath(); ctx.arc(p.x, p.y, 10 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = h.gesture === "point" ? PEN_COLORS[penColor] : "transparent";
+      ctx.strokeStyle = PEN_COLORS[penColor]; ctx.lineWidth = 3 * dpr;
+      ctx.fill(); ctx.stroke();
+    }
+    if (m === "music") {
+      ctx.font = `700 ${16 * dpr}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      [8, 12, 16, 20].forEach((t, k) => {
+        const p = h.pts[t];
+        ctx.fillStyle = handState[h.label]?.pinch[k] ? COLORS[h.label] : "#fff";
+        ctx.fillText(NOTE_LABEL[h.label][k], p.x, p.y - 16 * dpr);
+      });
+    }
+    if (h.hold) {
+      const c = h.pts[9];
+      ctx.lineWidth = 6 * dpr; ctx.strokeStyle = "rgba(255,255,255,.25)";
+      ctx.beginPath(); ctx.arc(c.x, c.y, 44 * dpr, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = h.hold.color;
+      ctx.beginPath(); ctx.arc(c.x, c.y, 44 * dpr, -Math.PI / 2, -Math.PI / 2 + h.hold.prog * Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  rings = rings.filter(r => {
+    r.t += dt * 1.8;
+    if (r.t >= 1) return false;
+    ctx.globalAlpha = 1 - r.t;
+    ctx.strokeStyle = r.color; ctx.lineWidth = 6 * dpr * (1 - r.t) + 1;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.max * r.t, 0, Math.PI * 2); ctx.stroke();
+    return true;
+  });
+
+  const step = dt * 60;
+  particles = particles.filter(p => {
+    p.vy += p.g * step; p.x += p.vx * step; p.y += p.vy * step; p.life -= step;
+    if (p.life <= 0) return false;
+    ctx.globalAlpha = Math.min(1, p.life / p.max * 1.5);
+    if (p.emoji) {
+      ctx.font = `${p.size}px serif`; ctx.textAlign = "center";
+      ctx.fillText(p.emoji, p.x, p.y);
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    }
+    return true;
+  });
+  if (particles.length > 1500) particles.splice(0, particles.length - 1500);
+  ctx.globalAlpha = 1;
+
+  if (banner) {
+    banner.t += dt;
+    if (banner.t > 1.4) banner = null;
+    else {
+      const t = banner.t, scale = Math.min(1, 0.6 + t * 4);
+      ctx.save();
+      ctx.globalAlpha = t > 1 ? (1.4 - t) / 0.4 : 1;
+      ctx.translate(canvas.width / 2, canvas.height * 0.32);
+      ctx.scale(scale, scale);
+      ctx.font = `800 ${40 * dpr}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.lineWidth = 6 * dpr; ctx.strokeStyle = "rgba(0,0,0,.45)";
+      ctx.strokeText(banner.text, 0, 0);
+      ctx.fillStyle = banner.color;
+      ctx.fillText(banner.text, 0, 0);
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- main loop ----------
+
+function detect() {
+  if (video.readyState < 2 || video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  const now = performance.now();
+  const result = landmarker.detectForVideo(video, now);
+  updateView();
+  hands = result.landmarks.map((lm, i) => {
+    // MediaPipe labels handedness as seen in a mirrored image; flip it for the back camera
+    let label = result.handednesses[i]?.[0]?.categoryName ?? "Right";
+    if (facing !== "user") label = label === "Left" ? "Right" : "Left";
+    const pts = lm.map(toScreen);
+    return { label, pts, size: d(pts[0], pts[9]) || 1, gesture: null };
+  });
+  processHands(now);
+
+  const byLabel = Object.fromEntries(hands.map(h => [h.label, h.gesture]));
+  document.getElementById("gL").textContent = EMOJI[byLabel.Left] ?? "·";
+  document.getElementById("gR").textContent = EMOJI[byLabel.Right] ?? "·";
+
+  frames++;
+  if (now - fpsT >= 1000) {
+    fpsEl.textContent = `${Math.round(frames * 1000 / (now - fpsT))} fps`;
+    frames = 0; fpsT = now;
+  }
+}
+
+function loop(now) {
+  detect();
+  render(now);
+  requestAnimationFrame(loop);
+}
+
+// ---------- setup ----------
 
 async function loadModel() {
   const files = await FilesetResolver.forVisionTasks(WASM);
-  const opts = (delegate) => ({
-    baseOptions: { modelAssetPath: MODEL, delegate },
-    runningMode: "VIDEO",
-    numHands: 2,
-  });
-  try {
-    return await HandLandmarker.createFromOptions(files, opts("GPU"));
-  } catch {
-    return await HandLandmarker.createFromOptions(files, opts("CPU"));
-  }
+  const opts = (delegate) => ({ baseOptions: { modelAssetPath: MODEL, delegate }, runningMode: "VIDEO", numHands: 2 });
+  try { return await HandLandmarker.createFromOptions(files, opts("GPU")); }
+  catch { return await HandLandmarker.createFromOptions(files, opts("CPU")); }
 }
 
 async function startCamera() {
@@ -124,96 +571,44 @@ async function startCamera() {
   });
   video.srcObject = stream;
   await video.play();
-  const mirror = facing === "user";
-  video.classList.toggle("mirror", mirror);
-  canvas.classList.toggle("mirror", mirror);
+  video.classList.toggle("mirror", facing === "user");
 }
 
-function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
-
-function countFingers(lm, label) {
-  let n = 0;
-  // Four fingers: tip farther from the wrist than the middle joint means it's extended
-  for (const tip of [8, 12, 16, 20]) {
-    if (dist(lm[tip], lm[0]) > dist(lm[tip - 2], lm[0])) n++;
-  }
-  // Thumb: tip farther from the pinky base than the thumb's lower joint
-  if (dist(lm[4], lm[17]) > dist(lm[2], lm[17]) * 1.15) n++;
-  return n;
-}
-
-function draw(result) {
-  const w = canvas.width = video.videoWidth;
-  const h = canvas.height = video.videoHeight;
-  ctx.clearRect(0, 0, w, h);
-  const s = Math.max(w, h) / 640;
-  const chips = [];
-
-  result.landmarks.forEach((lm, i) => {
-    // MediaPipe labels handedness as seen in a mirrored image; flip it for the back camera
-    let label = result.handednesses[i]?.[0]?.categoryName ?? "Right";
-    if (facing !== "user") label = label === "Left" ? "Right" : "Left";
-    const color = COLORS[label];
-
-    ctx.lineWidth = 4 * s;
-    ctx.strokeStyle = color;
-    ctx.lineCap = "round";
-    for (const [a, b] of BONES) {
-      ctx.beginPath();
-      ctx.moveTo(lm[a].x * w, lm[a].y * h);
-      ctx.lineTo(lm[b].x * w, lm[b].y * h);
-      ctx.stroke();
-    }
-    lm.forEach((p, j) => {
-      ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, (TIPS.includes(j) ? 8 : 5) * s, 0, Math.PI * 2);
-      ctx.fillStyle = TIPS.includes(j) ? "#ffffff" : color;
-      ctx.fill();
-    });
-
-    chips.push(`<span class="chip ${label.toLowerCase()}">${label} hand: <b>${countFingers(lm, label)}</b> fingers</span>`);
-  });
-
-  handsEl.innerHTML = chips.length ? chips.join("") : '<span class="stat">Show your hands to the camera</span>';
-}
-
-function loop() {
-  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
-    lastVideoTime = video.currentTime;
-    draw(landmarker.detectForVideo(video, performance.now()));
-    frames++;
-    const now = performance.now();
-    if (now - fpsT >= 1000) {
-      fpsEl.textContent = `${Math.round(frames * 1000 / (now - fpsT))} fps`;
-      frames = 0; fpsT = now;
-    }
-  }
-  requestAnimationFrame(loop);
-}
+const modesEl = document.getElementById("modes");
+MODES.forEach((m, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = m.name;
+  b.addEventListener("click", () => setMode(i));
+  modesEl.appendChild(b);
+});
 
 document.getElementById("go").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   msg.textContent = "";
+  try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
   try {
     btn.textContent = "Opening camera...";
     await startCamera();
     btn.textContent = "Loading hand model...";
     landmarker = await loadModel();
     document.getElementById("start").hidden = true;
+    resize();
+    setMode(0);
     requestAnimationFrame(loop);
   } catch (err) {
     btn.disabled = false;
     btn.textContent = "Try again";
     msg.textContent = err.name === "NotAllowedError"
-      ? "Camera access was blocked. Allow the camera for this site in your browser settings, then try again."
+      ? "Camera access was blocked. Allow the camera for this app in your phone settings, then try again."
       : `Couldn't start: ${err.message || err}`;
   }
 });
 
 document.getElementById("flip").addEventListener("click", async () => {
   facing = facing === "user" ? "environment" : "user";
-  try { await startCamera(); } catch (err) { msg.textContent = err.message; }
+  try { await startCamera(); } catch (err) { say("Couldn't switch camera"); }
 });
 </script>
 </body>
