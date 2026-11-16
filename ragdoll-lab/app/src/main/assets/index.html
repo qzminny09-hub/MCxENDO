@@ -5,20 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Ragdoll Lab</title>
 <style>
-  :root { --panel: rgba(20,24,30,.82); --btn: #2b323d; --btn-on: #e0703a; --txt: #e8ecf1; }
+  :root { --panel: rgba(18,22,28,.86); --btn: #2b323d; --btn-on: #e0703a; --txt: #e8ecf1; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1f26; font-family: system-ui, -apple-system, Roboto, sans-serif; color: var(--txt); touch-action: none; }
   canvas { display: block; position: fixed; inset: 0; }
-  .bar { position: fixed; display: flex; gap: 6px; padding: 6px; background: var(--panel); border-radius: 12px; z-index: 2; }
-  #tools { left: 8px; top: 50%; transform: translateY(-50%); flex-direction: column; max-height: calc(100% - 16px); overflow-y: auto; }
-  #top { right: 8px; top: 8px; }
-  #spawnbar { left: 50%; bottom: 8px; transform: translateX(-50%); flex-wrap: wrap; justify-content: center; max-width: calc(100% - 120px); }
+  .bar { position: fixed; display: flex; gap: 5px; padding: 5px; background: var(--panel); border-radius: 12px; z-index: 2; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
+  #tools { left: 6px; top: 50%; transform: translateY(-50%); display: grid; grid-template-columns: repeat(2, 46px); max-height: calc(100% - 12px); overflow-y: auto; }
+  #top { right: 6px; top: 6px; }
+  #spawnbar { left: 112px; right: 6px; bottom: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  #spawnbar::-webkit-scrollbar { display: none; }
   #spawnbar.hidden { display: none; }
-  button { border: 0; background: var(--btn); color: var(--txt); border-radius: 9px; min-width: 48px; height: 44px; padding: 2px 8px; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; cursor: pointer; }
+  #spawnbar .sep { flex: 0 0 auto; align-self: stretch; width: 2px; margin: 4px 3px; background: rgba(255,255,255,.12); border-radius: 2px; }
+  #spawnbar .lbl { flex: 0 0 auto; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 9px; letter-spacing: 1px; opacity: .55; text-transform: uppercase; text-align: center; }
+  button { flex: 0 0 auto; border: 0; background: var(--btn); color: var(--txt); border-radius: 9px; min-width: 46px; height: 44px; padding: 2px 6px; font-size: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; cursor: pointer; }
   button .i { font-size: 18px; }
   button.on { background: var(--btn-on); color: #fff; }
-  #hint { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: var(--panel); padding: 6px 12px; border-radius: 10px; font-size: 13px; pointer-events: none; z-index: 2; transition: opacity .4s; white-space: nowrap; }
-  #stats { position: fixed; right: 12px; bottom: 10px; font-size: 11px; opacity: .6; pointer-events: none; z-index: 2; }
+  button:active { filter: brightness(1.2); }
+  #hint { position: fixed; left: 50%; top: 8px; transform: translateX(-50%); background: var(--panel); padding: 6px 12px; border-radius: 10px; font-size: 13px; pointer-events: none; z-index: 2; transition: opacity .4s; white-space: nowrap; }
+  #stats { position: fixed; right: 12px; top: 62px; font-size: 10px; opacity: .45; pointer-events: none; z-index: 2; }
 </style>
 </head>
 <body>
@@ -26,6 +30,7 @@
 
 <div id="tools" class="bar">
   <button data-tool="drag" class="on"><span class="i">✋</span>Drag</button>
+  <button data-tool="use"><span class="i">👆</span>Use</button>
   <button data-tool="spawn"><span class="i">➕</span>Spawn</button>
   <button data-tool="cut"><span class="i">🔪</span>Cut</button>
   <button data-tool="boom"><span class="i">💥</span>Blast</button>
@@ -44,17 +49,34 @@
 </div>
 
 <div id="spawnbar" class="bar hidden">
+  <span class="lbl">Props</span>
   <button data-item="human" class="on"><span class="i">🧍</span>Human</button>
   <button data-item="crate"><span class="i">📦</span>Crate</button>
   <button data-item="ball"><span class="i">⚽</span>Ball</button>
   <button data-item="plank"><span class="i">🪵</span>Plank</button>
-  <button data-item="bomb"><span class="i">💣</span>Bomb</button>
   <button data-item="barrel"><span class="i">🛢</span>Barrel</button>
+  <span class="sep"></span><span class="lbl">Weapons</span>
+  <button data-item="pistol"><span class="i">🔫</span>Pistol</button>
+  <button data-item="rifle"><span class="i">🎯</span>Rifle</button>
+  <button data-item="shotgun"><span class="i">💢</span>Shotgun</button>
+  <button data-item="rpg"><span class="i">🚀</span>Rocket</button>
+  <button data-item="sword"><span class="i">🗡</span>Sword</button>
+  <span class="sep"></span><span class="lbl">Boom</span>
+  <button data-item="grenade"><span class="i">🧨</span>Grenade</button>
+  <button data-item="bomb"><span class="i">💣</span>Bomb</button>
+  <button data-item="mine"><span class="i">⚠️</span>Mine</button>
+  <span class="sep"></span><span class="lbl">Traps</span>
+  <button data-item="spikes"><span class="i">🔺</span>Spikes</button>
+  <button data-item="saw"><span class="i">⚙️</span>Saw</button>
 </div>
 
 <div id="hint">Drag ragdolls around. Pick a tool on the left.</div>
 <div id="stats"></div>
 
-<script src="game.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/gore.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/main.js"></script>
 </body>
 </html>
