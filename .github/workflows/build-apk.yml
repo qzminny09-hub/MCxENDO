@@ -1,0 +1,47 @@
+name: Build Ragdoll Lab APK
+
+on:
+  push:
+    paths:
+      - 'ragdoll-lab/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ragdoll-lab
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/*.apk ../dist/RagdollLab.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RagdollLab-apk
+          path: dist/RagdollLab.apk
+
+      - name: Publish to the "ragdoll-lab-latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ragdoll-lab-latest
+          name: Ragdoll Lab (latest build)
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: Latest APK built from `${{ github.ref_name }}` @ ${{ github.sha }}. Download RagdollLab.apk on your Android phone and install it.
+          files: dist/RagdollLab.apk

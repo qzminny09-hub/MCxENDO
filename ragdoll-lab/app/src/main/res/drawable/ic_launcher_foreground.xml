@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A tumbling stick-figure ragdoll -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#E0703A" android:strokeWidth="9" android:strokeLineCap="round"
+        android:pathData="M50,48 L60,64" />
+    <path android:strokeColor="#2F3D5C" android:strokeWidth="6" android:strokeLineCap="round"
+        android:pathData="M60,64 L54,76 L46,80 M60,64 L70,74 L68,84" />
+    <path android:strokeColor="#F1C9A5" android:strokeWidth="5" android:strokeLineCap="round"
+        android:pathData="M51,50 L40,54 L34,48 M52,50 L62,44 L70,38" />
+    <path android:fillColor="#F1C9A5"
+        android:pathData="M44,38 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+</vector>

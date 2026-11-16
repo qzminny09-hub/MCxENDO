@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Ragdoll Lab</title>
+<style>
+  :root { --panel: rgba(20,24,30,.82); --btn: #2b323d; --btn-on: #e0703a; --txt: #e8ecf1; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1f26; font-family: system-ui, -apple-system, Roboto, sans-serif; color: var(--txt); touch-action: none; }
+  canvas { display: block; position: fixed; inset: 0; }
+  .bar { position: fixed; display: flex; gap: 6px; padding: 6px; background: var(--panel); border-radius: 12px; z-index: 2; }
+  #tools { left: 8px; top: 50%; transform: translateY(-50%); flex-direction: column; max-height: calc(100% - 16px); overflow-y: auto; }
+  #top { right: 8px; top: 8px; }
+  #spawnbar { left: 50%; bottom: 8px; transform: translateX(-50%); flex-wrap: wrap; justify-content: center; max-width: calc(100% - 120px); }
+  #spawnbar.hidden { display: none; }
+  button { border: 0; background: var(--btn); color: var(--txt); border-radius: 9px; min-width: 48px; height: 44px; padding: 2px 8px; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; cursor: pointer; }
+  button .i { font-size: 18px; }
+  button.on { background: var(--btn-on); color: #fff; }
+  #hint { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: var(--panel); padding: 6px 12px; border-radius: 10px; font-size: 13px; pointer-events: none; z-index: 2; transition: opacity .4s; white-space: nowrap; }
+  #stats { position: fixed; right: 12px; bottom: 10px; font-size: 11px; opacity: .6; pointer-events: none; z-index: 2; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="tools" class="bar">
+  <button data-tool="drag" class="on"><span class="i">✋</span>Drag</button>
+  <button data-tool="spawn"><span class="i">➕</span>Spawn</button>
+  <button data-tool="cut"><span class="i">🔪</span>Cut</button>
+  <button data-tool="boom"><span class="i">💥</span>Blast</button>
+  <button data-tool="pin"><span class="i">📌</span>Pin</button>
+  <button data-tool="wall"><span class="i">📏</span>Wall</button>
+  <button data-tool="heal"><span class="i">💉</span>Heal</button>
+  <button data-tool="erase"><span class="i">🧽</span>Erase</button>
+</div>
+
+<div id="top" class="bar">
+  <button id="bPause"><span class="i">⏸</span>Pause</button>
+  <button id="bSlow"><span class="i">🐢</span>Slow</button>
+  <button id="bGrav"><span class="i">🌍</span>Gravity</button>
+  <button id="bClean"><span class="i">🧹</span>Clean</button>
+  <button id="bClear"><span class="i">🗑</span>Clear</button>
+</div>
+
+<div id="spawnbar" class="bar hidden">
+  <button data-item="human" class="on"><span class="i">🧍</span>Human</button>
+  <button data-item="crate"><span class="i">📦</span>Crate</button>
+  <button data-item="ball"><span class="i">⚽</span>Ball</button>
+  <button data-item="plank"><span class="i">🪵</span>Plank</button>
+  <button data-item="bomb"><span class="i">💣</span>Bomb</button>
+  <button data-item="barrel"><span class="i">🛢</span>Barrel</button>
+</div>
+
+<div id="hint">Drag ragdolls around. Pick a tool on the left.</div>
+<div id="stats"></div>
+
+<script src="game.js"></script>
+</body>
+</html>
